@@ -1,0 +1,20 @@
+FROM nousresearch/hermes-agent:latest
+
+USER root
+
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends \
+        ca-certificates \
+        poppler-utils \
+        tesseract-ocr \
+        tesseract-ocr-chi-sim \
+        tesseract-ocr-eng \
+        unzip \
+    && rm -rf /var/lib/apt/lists/*
+
+RUN uv pip install --python /opt/hermes/.venv/bin/python --no-cache \
+        ddgs \
+        pymupdf \
+        pypdf \
+        python-docx \
+        openpyxl

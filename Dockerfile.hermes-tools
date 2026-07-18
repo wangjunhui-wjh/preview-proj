@@ -1,0 +1,58 @@
+ARG PYTHON_IMAGE=python:3.13-slim
+FROM ${PYTHON_IMAGE}
+
+USER root
+
+ARG APT_MIRROR=https://mirrors.tuna.tsinghua.edu.cn
+ARG PIP_INDEX_URL=https://pypi.tuna.tsinghua.edu.cn/simple
+
+ENV PYTHONUNBUFFERED=1
+ENV PIP_DEFAULT_TIMEOUT=120
+ENV PIP_RETRIES=10
+
+RUN sed -i \
+        -e "s|http://deb.debian.org/debian-security|${APT_MIRROR}/debian-security|g" \
+        -e "s|http://deb.debian.org/debian|${APT_MIRROR}/debian|g" \
+        /etc/apt/sources.list.d/debian.sources \
+    && apt-get update \
+    && apt-get install -y --no-install-recommends \
+        antiword \
+        bash \
+        ca-certificates \
+        catdoc \
+        curl \
+        ffmpeg \
+        file \
+        ghostscript \
+        git \
+        jq \
+        libreoffice-calc \
+        libreoffice-impress \
+        libreoffice-writer \
+        nodejs \
+        npm \
+        poppler-utils \
+        procps \
+        ripgrep \
+        tesseract-ocr \
+        tesseract-ocr-chi-sim \
+        tesseract-ocr-eng \
+        unrtf \
+        unzip \
+        wget \
+    && rm -rf /var/lib/apt/lists/*
+
+RUN pip install --no-cache-dir --index-url "${PIP_INDEX_URL}" \
+        openpyxl==3.1.5 \
+        pdfplumber==0.11.8 \
+        pypdf==6.6.0 \
+        pymupdf==1.26.7 \
+        python-docx==1.2.0 \
+        python-pptx==1.0.2 \
+        pytesseract==0.3.13
+
+WORKDIR /workspace
+
+HEALTHCHECK NONE
+
+CMD ["sleep", "infinity"]

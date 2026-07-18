@@ -1,0 +1,61 @@
+# Python / Node build state
+.venv/
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+node_modules/
+
+# Secrets and machine-local configuration
+.env
+.env.*
+!.env.example
+!deploy/**/.env.example
+*.pem
+*.key
+
+# Runtime data: uploaded project files, checkpoints, databases and caches
+data/*
+runtime/
+docker/hermes-data/
+backups/
+
+# Runtime logs. Keep only durable engineering Markdown records.
+logs/*
+!logs/.gitkeep
+!logs/dual_edition_*.md
+!logs/hermes_docker_terminal_*.md
+
+# Generated outputs. Keep durable design/implementation Markdown documents.
+outputs/*
+!outputs/.gitkeep
+!outputs/双版本系统实施计划与验收标准.md
+!outputs/Hermes服务模式沙箱调研与改造建议.md
+
+# Recovery state: keep only shared implementation state, not PIDs/sessions.
+.state/*
+!.state/progress.md
+!.state/dual_edition_plan.md
+
+# Generated packages and local delivery bundles
+*.zip
+*.tar
+*.tar.gz
+*.tgz
+
+# Presentation and contest working materials are not application source.
+*.pptx
+关于集团第三届“盈科杯”青年创新创意大赛的报名通知*.pdf
+人工智能大赛报名表.docx
+~$*
+package.json
+package-lock.json
+scripts/generate_ppt_*
+scripts/prepare_ppt_*
+
+# Editor / OS files
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/
