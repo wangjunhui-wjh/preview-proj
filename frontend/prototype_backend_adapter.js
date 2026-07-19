@@ -826,16 +826,20 @@
     closeModal();
     setResultText('正在根据反馈重新分析...', true);
     try {
+      connectTaskEvents(state.taskId);
       const result = await apiFetch(`/api/tasks/${state.taskId}/feedback/${code}`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ feedback, action: 'revise' }),
       });
+      if (result.status && result.status !== 'completed') {
+        throw new Error(result.error || result.markdown || '反馈修正未完成，原节点结果已保留');
+      }
       if (result.markdown) state.results[code] = result.markdown;
       state.nodeStatuses[code] = result.status || 'completed';
       saveState();
       await refreshTask(true);
-      toast('已根据反馈修正，下游节点已清理', 'success');
+      toast('已根据反馈修正当前节点结果', 'success');
     } catch (err) {
       toast(`重新分析失败：${err.message}`, 'error');
       setResultText(`错误：${err.message}`, false);
@@ -855,11 +859,15 @@
     closeModal();
     setResultText('正在分析错误原因...', true);
     try {
+      connectTaskEvents(state.taskId);
       const result = await apiFetch(`/api/tasks/${state.taskId}/feedback/${code}`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ feedback, action: 'analyze_error' }),
       });
+      if (result.status && result.status !== 'completed') {
+        throw new Error(result.error || result.markdown || '错误原因分析未完成');
+      }
       setResultText(result.markdown || '错误原因分析完成', false);
       toast('错误原因分析完成，正式节点结果未被替换', 'success');
     } catch (err) {

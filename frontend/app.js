@@ -2744,11 +2744,15 @@ async function submitFeedbackRevision(code) {
   closeModal();
   const resultBox = document.getElementById('resultBox');
   if (resultBox) setResultBoxMarkdown('正在根据反馈重新分析...', { loading: true });
+  connectTaskEvents(state.taskId);
   const result = await apiFetch(`/api/tasks/${state.taskId}/feedback/${code}`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ feedback, action: 'revise' }),
   });
+  if (result.status && result.status !== 'completed') {
+    throw new Error(result.error || result.markdown || '反馈修正未完成，原节点结果已保留');
+  }
   if (result.markdown) state.results[code] = result.markdown;
   state.nodeStatuses[code] = result.status || 'completed';
   state.nodeEvidenceRefs[code] = result.evidence_refs || [];
@@ -2763,11 +2767,15 @@ async function analyzeFeedbackError(code) {
   closeModal();
   const resultBox = document.getElementById('resultBox');
   if (resultBox) setResultBoxMarkdown('正在分析错误原因...', { loading: true });
+  connectTaskEvents(state.taskId);
   const result = await apiFetch(`/api/tasks/${state.taskId}/feedback/${code}`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ feedback, action: 'analyze_error' }),
   });
+  if (result.status && result.status !== 'completed') {
+    throw new Error(result.error || result.markdown || '错误原因分析未完成');
+  }
   if (result.markdown) {
     setResultBoxMarkdown(result.markdown);
     toast('错误原因分析完成，正式节点结果未被替换', 'success');

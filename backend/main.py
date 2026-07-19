@@ -268,10 +268,10 @@ def _remove_node_outputs(task_id: str, node_ids: list[str]) -> None:
     out_dir = settings.output_dir / task_id
     if not out_dir.exists():
         return
-    for node_id in node_ids:
-        for path in out_dir.glob(f"{node_id}.*"):
-            if path.is_file():
-                path.unlink()
+    prefixes = tuple(prefix for node_id in node_ids for prefix in (f"{node_id}.", f"{node_id}_"))
+    for path in out_dir.iterdir():
+        if path.is_file() and path.name.startswith(prefixes):
+            path.unlink()
 
 
 def _extract_urls(text: str) -> list[str]:
@@ -1749,6 +1749,24 @@ async def feedback_node(task_id: str, node_id: str, payload: dict[str, Any]) -> 
         persist_result=True,
         output_prefix=node_id,
     )
+    if result.status != "completed":
+        # _execute_hermes_aux_agent persists its result before returning. Keep
+        # the last usable node result when the feedback run itself fails.
+        task.module_results[node_id] = previous
+        task.status = "paused"
+        task.current_node = None
+        task.active_hermes_run_id = None
+        task.error = result.error or "反馈修正未完成"
+        _rebuild_task_evidence_from_results(task)
+        task_store.save(task)
+        event_store.append(
+            task_id,
+            "node_feedback_failed",
+            f"Feedback revision failed for {node_id}",
+            node_id=node_id,
+            payload={"feedback": feedback, "error": task.error, "hermes_run_id": result.hermes_run_id},
+        )
+        return result
     route = list(NEXT_NODE.keys())
     clear_nodes = route[route.index(node_id) + 1 :] if node_id in route else []
     for clear_node in clear_nodes:
