@@ -26,6 +26,7 @@ logs/*
 !logs/.gitkeep
 !logs/dual_edition_*.md
 !logs/hermes_docker_terminal_*.md
+!logs/hermes_custom_provider_*.md
 !logs/prep_ingest_502_*.md
 
 # Generated outputs. Keep durable design/implementation Markdown documents.

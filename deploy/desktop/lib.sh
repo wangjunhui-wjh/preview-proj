@@ -3,7 +3,31 @@
 DESKTOP_DIR=${DESKTOP_DIR:?DESKTOP_DIR must be set before loading lib.sh}
 
 compose() {
-  docker compose --project-directory "$DESKTOP_DIR" -f "$DESKTOP_DIR/compose.yaml" "$@"
+  # Docker Compose lets inherited process variables override --env-file. Clear
+  # deployment-managed values so this edition is controlled only by its .env.
+  env \
+    -u COMPOSE_PROJECT_NAME \
+    -u APP_PORT \
+    -u HERMES_PORT \
+    -u OPENAI_API_KEY \
+    -u OPENAI_BASE_URL \
+    -u OPENAI_MODEL \
+    -u HERMES_API_SERVER_KEY \
+    -u BACKUP_IMAGE \
+    -u PIP_INDEX_URL \
+    -u REQUIREMENTS_FILE \
+    -u HERMES_REASONING_EFFORT \
+    -u HERMES_MAX_TURNS \
+    -u HERMES_MAX_CONCURRENT_RUNS \
+    -u HERMES_TERMINAL_TIMEOUT \
+    -u HERMES_REQUEST_TIMEOUT \
+    -u HERMES_WEB_BACKEND \
+    -u HERMES_WEB_SEARCH_BACKEND \
+    -u FIRECRAWL_API_KEY \
+    -u TAVILY_API_KEY \
+    -u EXA_API_KEY \
+    -u PARALLEL_API_KEY \
+    docker compose --env-file "$DESKTOP_DIR/.env" --project-directory "$DESKTOP_DIR" -f "$DESKTOP_DIR/compose.yaml" "$@"
 }
 
 require_docker() {
@@ -114,51 +138,19 @@ validate_port() {
 }
 
 validate_env_file() {
-  provider="$(read_env_value LLM_PROVIDER)"
-  provider=${provider:-custom}
-  model_name="$(read_env_value LLM_MODEL)"
-  if [ -z "$model_name" ]; then
-    model_name="$(read_env_value OPENAI_MODEL)"
-  fi
+  model_name="$(read_env_value OPENAI_MODEL)"
   openai_key="$(read_env_value OPENAI_API_KEY)"
-  deepseek_key="$(read_env_value DEEPSEEK_API_KEY)"
-  model_url="$(read_env_value LLM_BASE_URL)"
-  if [ -z "$model_url" ]; then
-    model_url="$(read_env_value OPENAI_BASE_URL)"
-  fi
-  if [ -z "$model_url" ]; then
-    model_url="$(read_env_value CUSTOM_BASE_URL)"
-  fi
+  model_url="$(read_env_value OPENAI_BASE_URL)"
   hermes_key="$(read_env_value HERMES_API_SERVER_KEY)"
 
-  case "$provider" in
-    custom)
-      if is_template_value "$openai_key" || [ "${#openai_key}" -lt 8 ]; then
-        printf '%s\n' 'Set OPENAI_API_KEY in deploy/desktop/.env.' >&2
-        exit 1
-      fi
-      if is_template_value "$model_url"; then
-        printf '%s\n' 'Set OPENAI_BASE_URL or LLM_BASE_URL for the custom provider.' >&2
-        exit 1
-      fi
-      ;;
-    openai)
-      if is_template_value "$openai_key" || [ "${#openai_key}" -lt 8 ]; then
-        printf '%s\n' 'Set OPENAI_API_KEY in deploy/desktop/.env.' >&2
-        exit 1
-      fi
-      ;;
-    deepseek)
-      if is_template_value "$deepseek_key" || [ "${#deepseek_key}" -lt 8 ]; then
-        printf '%s\n' 'Set DEEPSEEK_API_KEY in deploy/desktop/.env.' >&2
-        exit 1
-      fi
-      ;;
-    *)
-      printf '%s\n' 'LLM_PROVIDER must be custom, openai or deepseek.' >&2
-      exit 1
-      ;;
-  esac
+  if is_template_value "$openai_key" || [ "${#openai_key}" -lt 8 ]; then
+    printf '%s\n' 'Set OPENAI_API_KEY in deploy/desktop/.env.' >&2
+    exit 1
+  fi
+  if is_template_value "$model_url"; then
+    printf '%s\n' 'Set OPENAI_BASE_URL in deploy/desktop/.env.' >&2
+    exit 1
+  fi
 
   if [ -n "$model_url" ]; then
     case "$model_url" in
@@ -170,14 +162,14 @@ validate_env_file() {
     esac
   fi
   if is_template_value "$model_name"; then
-    printf '%s\n' 'Set LLM_MODEL or OPENAI_MODEL in deploy/desktop/.env.' >&2
+    printf '%s\n' 'Set OPENAI_MODEL in deploy/desktop/.env.' >&2
     exit 1
   fi
   if is_template_value "$hermes_key" || [ "${#hermes_key}" -lt 16 ]; then
     printf '%s\n' 'HERMES_API_SERVER_KEY must contain at least 16 non-template characters.' >&2
     exit 1
   fi
-  if [ "$hermes_key" = "$openai_key" ] || [ "$hermes_key" = "$deepseek_key" ]; then
+  if [ "$hermes_key" = "$openai_key" ]; then
     printf '%s\n' 'HERMES_API_SERVER_KEY must not reuse a model provider key.' >&2
     exit 1
   fi

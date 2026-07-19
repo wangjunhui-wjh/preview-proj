@@ -15,6 +15,8 @@ cd deploy/server
 
 第一次运行只创建权限为 `0600` 的 `.env`。填写 `SERVER_NAME` 和模型配置后再次运行。首次有效启动会生成并只显示一次 Basic Auth 初始密码，需立即保存。
 
+模型配置仅使用 `OPENAI_API_KEY`、`OPENAI_BASE_URL` 和 `OPENAI_MODEL`。`OPENAI_BASE_URL` 应指向 OpenAI 兼容服务；启动时会统一为 `/v1` 基地址。
+
 `RUNTIME_ROOT` 会在启动时转换为宿主机绝对路径。这是 Hermes Docker terminal 的必要条件：工具容器 bind mount 的来源必须是 Docker daemon 所在主机的真实路径，不能是 Controller 容器内的路径。
 
 ## TLS 与访问

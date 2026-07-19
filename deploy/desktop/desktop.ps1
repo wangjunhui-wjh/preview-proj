@@ -14,11 +14,35 @@ $DesktopDir = $PSScriptRoot
 $ComposeFile = Join-Path $DesktopDir "compose.yaml"
 $EnvFile = Join-Path $DesktopDir ".env"
 Set-Location -LiteralPath $DesktopDir
+$ComposeManagedVariables = @(
+    "COMPOSE_PROJECT_NAME", "APP_PORT", "HERMES_PORT", "OPENAI_API_KEY",
+    "OPENAI_BASE_URL", "OPENAI_MODEL",
+    "HERMES_API_SERVER_KEY", "BACKUP_IMAGE", "PIP_INDEX_URL",
+    "REQUIREMENTS_FILE", "HERMES_REASONING_EFFORT", "HERMES_MAX_TURNS",
+    "HERMES_MAX_CONCURRENT_RUNS", "HERMES_TERMINAL_TIMEOUT",
+    "HERMES_REQUEST_TIMEOUT", "HERMES_WEB_BACKEND", "HERMES_WEB_SEARCH_BACKEND",
+    "FIRECRAWL_API_KEY", "TAVILY_API_KEY", "EXA_API_KEY", "PARALLEL_API_KEY"
+)
 
 function Invoke-Compose {
-    & docker compose --project-directory $DesktopDir -f $ComposeFile @args
-    if ($LASTEXITCODE -ne 0) {
-        throw "docker compose failed with exit code $LASTEXITCODE"
+    $saved = @{}
+    foreach ($name in $ComposeManagedVariables) {
+        $existing = [Environment]::GetEnvironmentVariable($name, "Process")
+        if ($null -ne $existing) {
+            $saved[$name] = $existing
+            Remove-Item -Path "Env:$name" -ErrorAction SilentlyContinue
+        }
+    }
+    try {
+        & docker compose --env-file $EnvFile --project-directory $DesktopDir -f $ComposeFile @args
+        if ($LASTEXITCODE -ne 0) {
+            throw "docker compose failed with exit code $LASTEXITCODE"
+        }
+    }
+    finally {
+        foreach ($name in $saved.Keys) {
+            [Environment]::SetEnvironmentVariable($name, $saved[$name], "Process")
+        }
     }
 }
 
@@ -117,37 +141,20 @@ function Assert-Port([string]$Name, [string]$Value) {
 }
 
 function Assert-Env {
-    $provider = Get-EnvValue "LLM_PROVIDER"
-    if ([string]::IsNullOrEmpty($provider)) { $provider = "custom" }
-    $modelName = Get-EnvValue "LLM_MODEL"
-    if ([string]::IsNullOrEmpty($modelName)) { $modelName = Get-EnvValue "OPENAI_MODEL" }
+    $modelName = Get-EnvValue "OPENAI_MODEL"
     $openAiKey = Get-EnvValue "OPENAI_API_KEY"
-    $deepSeekKey = Get-EnvValue "DEEPSEEK_API_KEY"
-    $modelUrl = Get-EnvValue "LLM_BASE_URL"
-    if ([string]::IsNullOrEmpty($modelUrl)) { $modelUrl = Get-EnvValue "OPENAI_BASE_URL" }
-    if ([string]::IsNullOrEmpty($modelUrl)) { $modelUrl = Get-EnvValue "CUSTOM_BASE_URL" }
+    $modelUrl = Get-EnvValue "OPENAI_BASE_URL"
     $hermesKey = Get-EnvValue "HERMES_API_SERVER_KEY"
 
-    switch ($provider) {
-        "custom" {
-            if ((Test-TemplateValue $openAiKey) -or $openAiKey.Length -lt 8) { throw "Set OPENAI_API_KEY in deploy/desktop/.env." }
-            if (Test-TemplateValue $modelUrl) { throw "Set OPENAI_BASE_URL or LLM_BASE_URL for the custom provider." }
-        }
-        "openai" {
-            if ((Test-TemplateValue $openAiKey) -or $openAiKey.Length -lt 8) { throw "Set OPENAI_API_KEY in deploy/desktop/.env." }
-        }
-        "deepseek" {
-            if ((Test-TemplateValue $deepSeekKey) -or $deepSeekKey.Length -lt 8) { throw "Set DEEPSEEK_API_KEY in deploy/desktop/.env." }
-        }
-        default { throw "LLM_PROVIDER must be custom, openai or deepseek." }
-    }
+    if ((Test-TemplateValue $openAiKey) -or $openAiKey.Length -lt 8) { throw "Set OPENAI_API_KEY in deploy/desktop/.env." }
+    if (Test-TemplateValue $modelUrl) { throw "Set OPENAI_BASE_URL in deploy/desktop/.env." }
     if (Test-TemplateValue $modelName) {
-        throw "Set LLM_MODEL or OPENAI_MODEL in deploy/desktop/.env."
+        throw "Set OPENAI_MODEL in deploy/desktop/.env."
     }
     if ((Test-TemplateValue $hermesKey) -or $hermesKey.Length -lt 16) {
         throw "HERMES_API_SERVER_KEY must contain at least 16 non-template characters."
     }
-    if ($hermesKey -eq $openAiKey -or $hermesKey -eq $deepSeekKey) {
+    if ($hermesKey -eq $openAiKey) {
         throw "HERMES_API_SERVER_KEY must not reuse a model provider key."
     }
 
@@ -187,7 +194,7 @@ function Start-Desktop {
     Initialize-Env
     if ($script:EnvCreated) {
         Write-Host "Created deploy/desktop/.env with a random Hermes API key."
-        Write-Host "Set the model provider, key, URL and model name, then run start.bat again."
+        Write-Host "Set OPENAI_API_KEY, OPENAI_BASE_URL and OPENAI_MODEL, then run start.bat again."
         Start-Process notepad.exe -ArgumentList $EnvFile
         return
     }
@@ -223,10 +230,7 @@ function Backup-Desktop {
     Assert-Env
     Initialize-Runtime
 
-    $running = @(& docker compose --project-directory $DesktopDir -f $ComposeFile ps --services --status running)
-    if ($LASTEXITCODE -ne 0) {
-        throw "Could not inspect the Compose project."
-    }
+    $running = @(Invoke-Compose ps --services --status running)
     $wasBackend = $running -contains "backend"
     $wasHermes = $running -contains "hermes"
     $stopped = $false

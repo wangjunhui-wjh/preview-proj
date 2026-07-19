@@ -28,13 +28,12 @@ start.bat
 第一次执行会创建 `deploy/desktop/.env` 并生成 Hermes 内部随机密钥，然后停止。填写模型配置后再次启动：
 
 ```env
-LLM_PROVIDER=custom
 OPENAI_API_KEY=真实模型服务Key
 OPENAI_BASE_URL=https://模型服务地址/v1
 OPENAI_MODEL=真实模型名称
 ```
 
-也支持 `LLM_PROVIDER=deepseek` 配合 `DEEPSEEK_API_KEY`，或 `LLM_PROVIDER=openai` 配合 `OPENAI_API_KEY`。成功后访问 `http://127.0.0.1:8501`。Web 与 Hermes 调试端口均只绑定本机回环地址。
+模型配置只使用这三个 `OPENAI_*` 字段。成功后访问 `http://127.0.0.1:8501`。Web 与 Hermes 调试端口均只绑定本机回环地址。
 
 常用操作：
 
@@ -60,7 +59,6 @@ cd deploy/server
 
 ```env
 SERVER_NAME=eia.example.internal
-LLM_PROVIDER=custom
 OPENAI_API_KEY=真实模型服务Key
 OPENAI_BASE_URL=https://模型服务地址/v1
 OPENAI_MODEL=真实模型名称

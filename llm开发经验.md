@@ -221,37 +221,38 @@ OPENAI_BASE_UR
 补充：
 - 某些 shell 文件会在非交互 shell 中提前 `return`，例如 `.bashrc` 顶部的 `case $-` 判断。服务进程不一定能继承用户交互终端里的 export。
 - 长期服务不要依赖“当前终端里 export 过”，应写入服务自己的 `.env`、systemd Environment 或应用配置。
-- Hermes `custom` provider 不再把 `OPENAI_BASE_URL` 当 endpoint 真相，应该配置 `~/.hermes/config.yaml` 的 `model.base_url`。
+- 本项目部署层会把 `OPENAI_BASE_URL` 写入 Hermes 的生成配置 `model.base_url`；不要手工编辑运行时 `config.yaml`。
 
-## 11.1 OpenAI-compatible Base URL 必须指向 `/v1`
+## 11.1 自定义 OpenAI 兼容服务要显式声明 Key 来源与 `/v1`
 
-本机前置验证发现：
+表现：
+- 非流式直连请求成功，但 Hermes Agent `/v1/runs` 返回 `401 Invalid API key`。
+- 修正 401 后，Agent 仍返回 `Provider returned an empty stream with no finish_reason`。
 
-```text
-https://api.aiboys.xyz      -> 非流式返回形态异常，流式为空
-https://api.aiboys.xyz/v1   -> 非流式和流式均正常
+原因：
+- Hermes 0.18.2 不会让裸 `provider: custom` 自动把 `OPENAI_API_KEY` 发往非 `openai.com` 域名，避免把 OpenAI 凭据泄漏给任意代理地址。
+- OpenAI SDK 会在 `base_url` 后追加 `/chat/completions`。若配置为服务根地址而不是 `/v1`，会请求错误路径，例如 `https://host/chat/completions`。
+- 仅在宿主 Shell 或 Docker 容器环境中看见 Key 不足以证明 Agent 路径已正确取用该 Key，必须实际运行一次 `/v1/runs`。
+
+推荐配置：
+
+```yaml
+model:
+  default: '实际模型名'
+  provider: 'custom:业务网关'
+  base_url: 'https://模型服务地址/v1'
+custom_providers:
+  - name: '业务网关'
+    base_url: 'https://模型服务地址/v1'
+    key_env: 'OPENAI_API_KEY'
+    model: '实际模型名'
+    api_mode: 'chat_completions'
 ```
 
-Hermes 失败日志：
-
-```text
-Provider returned an empty stream with no finish_reason
-```
-
-排查结论：
-- 上游接口本身可用。
-- 问题不是 API key，也不是模型名。
-- Hermes/OpenAI SDK 需要 `base_url` 指向 OpenAI-compatible 的 `/v1` 根路径。
-
-处理：
-
-```bash
-hermes config set model.provider custom
-hermes config set model.default gpt-5.5
-hermes config set model.base_url https://api.aiboys.xyz/v1
-```
-
-如果 custom endpoint 的域名不是 `openai.com`，Hermes 出于防泄漏考虑不一定会自动把 `OPENAI_API_KEY` 发给该域名。当前 `api.aiboys.xyz` 可通过 `AIBOYS_API_KEY` 让 Hermes 读取同一把 key。
+要求：
+- `key_env` 只引用环境变量，禁止把真实 Key 写入 `config.yaml`。
+- 部署层只接受 `OPENAI_API_KEY`、`OPENAI_BASE_URL`、`OPENAI_MODEL` 三个模型字段；基地址统一规范为 `/v1`。
+- 升级 Hermes、替换 Docker 镜像或切换部署脚本后，依次验证：运行进程的脱敏 Key 指纹、直接流式 `/v1/chat/completions`、实际 Agent `/v1/runs`。
 
 ## 12. 超时不宜过短
 

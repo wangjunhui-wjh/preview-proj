@@ -12,12 +12,12 @@
 
 ## Current State
 
-- current_step: `DUAL-07`
+- current_step: `MAINTENANCE-LLM-02`
 - next_step: `MAINTENANCE_or_next_release`
-- status: `dual_edition_delivery_complete`
+- status: `desktop_oai_configuration_simplified`
 - last_updated: `2026-07-19 Asia/Shanghai`
 - target_route: `Hermes Agent + LangGraph + uploaded HTML prototype`
-- active_agents: `Hermes API Server running in tmux session hermes-eia, provider:custom, model:grok-4.5, terminal:docker`; `Docker backend container eia-ai-backend on http://127.0.0.1:8501`
+- active_agents: `Desktop Compose Hermes API Server eia-desktop-hermes-1, provider:custom:eia-managed, model:grok-4.5, terminal:local in Controller container`; `Desktop Compose backend eia-desktop-backend-1 on http://127.0.0.1:8501`
 
 > 当前主任务为双版本交付。恢复时依次读取 `.state/dual_edition_plan.md`、`logs/dual_edition_20260719.md` 和 `outputs/双版本系统实施计划与验收标准.md`，再从当前 `next_step` 继续。
 
@@ -103,6 +103,10 @@
 - 历史运行日志与报告产物，仅保留 `.gitkeep`
 
 ## Change Log
+
+- 2026-07-19 Asia/Shanghai: `MAINTENANCE-LLM-02` 完成。按用户要求，模型配置收敛为唯一的 OpenAI-compatible 三字段：`OPENAI_API_KEY`、`OPENAI_BASE_URL`、`OPENAI_MODEL`。共享 Hermes 启动钩子、Desktop/Server Compose、Linux/Windows 启动校验、示例 `.env` 和交付文档均移除了 `LLM_PROVIDER`、`LLM_MODEL`、`LLM_BASE_URL`、`CUSTOM_BASE_URL`、`DEEPSEEK_API_KEY` 的模型配置路径；其余 Hermes 资源限制、超时与联网检索 Key 仍为独立的运维配置。实际 Desktop Hermes 进程和生成 `.env` 仅含三个 `OPENAI_*` 模型变量，生成配置为 `custom:eia-managed`、`https://api.aiboys.xyz/v1`；真实 Agent run `run_7c2ed2c4eb024c658752aa141cb10ff3` 已 `completed`，输出 `OK`。用户当前只需在 `deploy/desktop/.env` 填写这三个字段；服务已重建并健康。
+
+- 2026-07-19 Asia/Shanghai: `MAINTENANCE-LLM-01` 完成。用户质疑新单机版是否实际取用了错误模型 Key；已以脱敏长度/SHA-256 比对证明 `deploy/desktop/.env`、Compose 容器、Hermes 实际 Gateway 进程和 Hermes 生成 `.env` 的 `OPENAI_API_KEY` 完全一致，未发生宿主机环境变量覆盖、截断或替换。进一步发现 Hermes 0.18.2 对非 `openai.com` 的裸 `provider=custom` 采用防凭据泄漏策略：Agent `/v1/runs` 不自动向自定义域名发送 `OPENAI_API_KEY`，导致 401；同时高优先级 `LLM_BASE_URL=https://api.aiboys.xyz` 覆盖了 `CUSTOM_BASE_URL=.../v1`，使 SDK 实际请求缺少 `/v1` 并收到 HTTP 200 空 SSE 流。共享 Hermes 启动钩子现将 custom provider 声明为 Hermes 原生 `custom:eia-managed`，通过 `key_env: OPENAI_API_KEY` 取密钥（不写入 config.yaml），并将 OpenAI-compatible 基地址规范化为 `/v1`。完整 `/v1/runs` Agent 验证 `run_8e7783ebdf974e1db5188d2829eb1afc` 已 `completed`，输出 `OK`，输入/输出 token 为 `16778/25`；Desktop backend/Hermes 健康检查均通过。详见 `logs/hermes_custom_provider_20260719.md`；旧失败任务保持未自动续跑。
 
 - 2026-07-19 Asia/Shanghai: 运行诊断完成，未修改或重启在线服务。任务 `90510bf2-b7b7-4956-857b-a0a3a6b8566b` 的 `FILE-VALIDATION` 已完成；`PREP-INGEST` run `run_f0f4c8844455405e85287c461eb95ac5` 在第六次模型续写后连续三次收到上游 `HTTP 502: Upstream request failed` 并失败。当前实际运行的是历史 `eia-ai-backend:latest -> host.docker.internal:8642 -> 宿主 Hermes custom/grok-4.5`，不是新交付的 `deploy/desktop/` Compose。Gateway `/health` 正常，最小 `/v1/chat/completions` 请求返回 HTTP 200/OK，说明 Key/网关/模型服务不是全局不可用；502 为该大工具上下文的上游请求失败。任务同时暴露历史 Docker terminal 的 `vision_analyze` 读取 `/workspace/prep_ingest/pages/*.png` 路径失败，该路径不可被宿主 Hermes Controller 读取。详见 `logs/prep_ingest_502_20260719.md`；建议后续切换到新单机版受控视觉缓存配置并使用部署 `.env` 中指定的模型。
 

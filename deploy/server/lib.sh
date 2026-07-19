@@ -5,7 +5,8 @@ ENV_FILE="$SERVER_DIR/.env"
 PROJECT_ROOT=$(CDPATH= cd "$SERVER_DIR/../.." && pwd)
 
 compose() {
-  docker compose --env-file "$ENV_FILE" --project-directory "$SERVER_DIR" -f "$SERVER_DIR/compose.yaml" "$@"
+  env -u OPENAI_API_KEY -u OPENAI_BASE_URL -u OPENAI_MODEL \
+    docker compose --env-file "$ENV_FILE" --project-directory "$SERVER_DIR" -f "$SERVER_DIR/compose.yaml" "$@"
 }
 
 die() {
@@ -136,26 +137,13 @@ prepare_runtime() {
 }
 
 validate_model_configuration() {
-  provider=$(read_env_value LLM_PROVIDER)
-  provider=${provider:-custom}
-  model=$(read_env_value LLM_MODEL)
-  [ -n "$model" ] || model=$(read_env_value OPENAI_MODEL)
+  model=$(read_env_value OPENAI_MODEL)
   openai_key=$(read_env_value OPENAI_API_KEY)
-  deepseek_key=$(read_env_value DEEPSEEK_API_KEY)
-  base_url=$(read_env_value LLM_BASE_URL)
-  [ -n "$base_url" ] || base_url=$(read_env_value OPENAI_BASE_URL)
-  [ -n "$base_url" ] || base_url=$(read_env_value CUSTOM_BASE_URL)
-  case "$provider" in
-    custom)
-      ! is_template_value "$openai_key" && [ "${#openai_key}" -ge 8 ] || die 'Set OPENAI_API_KEY.'
-      ! is_template_value "$base_url" || die 'Set OPENAI_BASE_URL or LLM_BASE_URL for the custom provider.'
-      ;;
-    openai) ! is_template_value "$openai_key" && [ "${#openai_key}" -ge 8 ] || die 'Set OPENAI_API_KEY.' ;;
-    deepseek) ! is_template_value "$deepseek_key" && [ "${#deepseek_key}" -ge 8 ] || die 'Set DEEPSEEK_API_KEY.' ;;
-    *) die 'LLM_PROVIDER must be custom, openai or deepseek.' ;;
-  esac
-  ! is_template_value "$model" || die 'Set LLM_MODEL or OPENAI_MODEL.'
-  if [ -n "$base_url" ]; then case "$base_url" in http://*|https://*) ;; *) die 'Model base URL must be absolute HTTP(S).' ;; esac; fi
+  base_url=$(read_env_value OPENAI_BASE_URL)
+  ! is_template_value "$openai_key" && [ "${#openai_key}" -ge 8 ] || die 'Set OPENAI_API_KEY.'
+  ! is_template_value "$base_url" || die 'Set OPENAI_BASE_URL.'
+  ! is_template_value "$model" || die 'Set OPENAI_MODEL.'
+  case "$base_url" in http://*|https://*) ;; *) die 'OPENAI_BASE_URL must be absolute HTTP(S).' ;; esac
 }
 
 ensure_secrets() {

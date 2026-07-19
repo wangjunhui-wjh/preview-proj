@@ -21,11 +21,12 @@ start.bat
 第一次运行只会生成 `.env` 和一把 `desktop-` 前缀的 256-bit 随机 Hermes API Key，然后停止。填写以下三项后再次运行启动脚本：
 
 ```env
-LLM_PROVIDER=custom
 OPENAI_API_KEY=真实模型服务Key
 OPENAI_BASE_URL=https://模型服务地址/v1
 OPENAI_MODEL=真实模型名称
 ```
+
+模型配置只有这三个 `OPENAI_*` 字段。不要再添加 `LLM_BASE_URL`、`CUSTOM_BASE_URL` 或其他模型 Key；启动脚本会将地址统一为 OpenAI 兼容的 `/v1` 基地址，并由 Hermes 从 `OPENAI_API_KEY` 读取凭据。
 
 启动成功后访问 `http://127.0.0.1:8501`。Web 与 Hermes 调试端口都固定绑定宿主机 `127.0.0.1`，不会监听局域网地址。可以通过 `.env` 修改 `APP_PORT` 和 `HERMES_PORT`，但不能修改绑定地址。
 
