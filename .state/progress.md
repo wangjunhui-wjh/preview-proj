@@ -12,9 +12,9 @@
 
 ## Current State
 
-- current_step: `POC-FEEDBACK-01`
-- next_step: `DEPLOY_FEEDBACK_FIX_AFTER_ACTIVE_RUN`
-- status: `feedback_revision_and_output_cleanup_implemented_pending_deploy`
+- current_step: `RESEARCH-HERMES-TOOLS-CODEX-01`
+- next_step: `SELECT_AND_IMPLEMENT_HERMES_SEARCH_EXTRACT_BACKENDS`
+- status: `hermes_tooling_research_complete_codex_executor_poc_optional`
 - last_updated: `2026-07-19 Asia/Shanghai`
 - target_route: `Hermes Agent + LangGraph + uploaded HTML prototype`
 - active_agents: `Desktop Compose Hermes API Server eia-desktop-hermes-1, provider:custom:eia-managed, model:gpt-5.6-terra, terminal:local in Controller container`; `Desktop Compose backend eia-desktop-backend-1 on http://127.0.0.1:8501`
@@ -103,6 +103,8 @@
 - 历史运行日志与报告产物，仅保留 `.gitkeep`
 
 ## Change Log
+
+- 2026-07-19 Asia/Shanghai: `RESEARCH-HERMES-TOOLS-CODEX-01` 完成。核对 Hermes 官方配置/MCP/工具文档、社区配置经验和相关 GitHub issues：当前公开检索成功率主要受 search/extract backend、模型 tool calling、工具范围与浏览器反自动化影响，不应以百度/Bing 浏览器页面或当前回退搜索作为唯一生产路径。建议低运维采用 Tavily search/extract，私有化采用 SearXNG search + Firecrawl extract，并为 EIA 建立精简 profile、MCP 白名单和固定 Provider。独立子 Agent 同时审查 Codex CLI 接入：当前 LangGraph 执行边界支持替换 executor，优先用 `codex exec --json` 对 `HB-PT-002/HB-PT-009` 做 feature-flag A/B POC；通过后再建设 Codex sidecar，不建议把 Hermes -> Codex MCP 双 Agent 作为固定主链。详细来源、限制和验收顺序见 `logs/hermes_tooling_codex_research_20260719.md`。同时已在业务任务暂停后发布此前反馈修正/成果清理补丁；Desktop backend/Hermes ready，任务 `3e66d0a2-9e8b-42f1-b02d-6401a85a8bb0` 保持 `paused`、下一节点 `HB-PT-010`、无活动 run。
 
 - 2026-07-19 Asia/Shanghai: `POC-FEEDBACK-01` 实现阶段完成，待当前真实专项任务结束后发布。反馈修正路径现在会接入任务事件流；如果反馈 Agent 返回失败，后端恢复原节点结果、保留任务可重试状态，并向前端返回失败而不是提示“修正成功”。本次不修改节点完成门禁、普通流程或下游依赖清理策略。同时修复节点成果删除遗漏：`_remove_node_outputs()` 现在同时清理 `{node_id}.*` 与 `{node_id}_*`，覆盖 `*_report.md`、`*_result.json`、标准结果和反馈分析文件；临时目录删除测试通过，真实运行任务未被触碰。详见 `logs/feedback_revision_20260719.md`。
 

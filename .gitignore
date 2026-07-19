@@ -37,6 +37,7 @@ logs/*
 !logs/model_switch_*.md
 !logs/specialty_rerun_*.md
 !logs/feedback_revision_*.md
+!logs/hermes_tooling_codex_research_*.md
 
 # Generated outputs. Keep durable design/implementation Markdown documents.
 outputs/*
