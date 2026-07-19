@@ -76,6 +76,7 @@ backups/            一致性备份包
 - Hermes 使用仓库共享的 `Dockerfile.hermes`；该 Dockerfile 会把共享的 `docker/hermes/start-hermes.sh` 安装为 s6 初始化钩子，并保留基础镜像的 Gateway 托管入口。
 - Compose 显式传入 `HERMES_TERMINAL_BACKEND=local` 和 `/opt/data/workspace` 工作目录；这里的 local 是 Hermes 容器内部终端，不是宿主机终端。
 - Hermes 以只读方式访问 `/eia/workspaces`，以读写方式访问 `/eia/outputs` 和 `/eia/vision-cache`，不挂载 Docker socket；文件工具的写入白名单只包含 `/opt/data` 与 `/eia/outputs`。
+- Hermes 使用原生上下文压缩器；压缩在原会话内完成，若摘要生成失败则停止该节点，不以静默截断的上下文继续运行。
 - backend 只通过内部 Compose 网络访问 `http://hermes:8642`，模型 Key 只传给预检与 Hermes 容器。
 
 首次构建会下载 Hermes 基础镜像并安装 OCR/PDF 依赖，耗时和占用空间明显高于普通 Web 镜像。项目源码及三个共享文件必须保持相对目录结构不变，不能只复制 `deploy/desktop/` 单独构建。

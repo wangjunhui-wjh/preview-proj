@@ -31,6 +31,7 @@ logs/*
 !logs/prep_ingest_502_*.md
 !logs/repository_cleanup_*.md
 !logs/desktop_edition_branch_*.md
+!logs/hermes_context_compression_*.md
 
 # Generated outputs. Keep durable design/implementation Markdown documents.
 outputs/*

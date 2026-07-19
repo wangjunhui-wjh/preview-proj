@@ -164,6 +164,10 @@ compression:
   target_ratio: 0.2
   protect_last_n: 20
   protect_first_n: 3
+  in_place: true
+  abort_on_summary_failure: true
+context:
+  engine: compressor
 prompt_caching:
   cache_ttl: 5m
 gateway:
