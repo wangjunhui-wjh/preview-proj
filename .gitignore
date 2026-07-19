@@ -34,6 +34,7 @@ logs/*
 !logs/hermes_context_compression_*.md
 !logs/upstream_model_503_*.md
 !logs/hermes_premature_stop_*.md
+!logs/model_switch_*.md
 
 # Generated outputs. Keep durable design/implementation Markdown documents.
 outputs/*

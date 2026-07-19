@@ -12,12 +12,12 @@
 
 ## Current State
 
-- current_step: `DIAGNOSE-PREMATURE-STOP-01`
-- next_step: `IMPLEMENT_EIA_NODE_COMPLETION_GATE`
-- status: `premature_agent_stop_root_cause_confirmed`
+- current_step: `MODEL-COMPARISON-01`
+- next_step: `TEST_HB002_WITH_GPT_5_6_TERRA`
+- status: `gpt_5_6_terra_active_waiting_for_comparison_test`
 - last_updated: `2026-07-19 Asia/Shanghai`
 - target_route: `Hermes Agent + LangGraph + uploaded HTML prototype`
-- active_agents: `Desktop Compose Hermes API Server eia-desktop-hermes-1, provider:custom:eia-managed, model:grok-4.5, terminal:local in Controller container`; `Desktop Compose backend eia-desktop-backend-1 on http://127.0.0.1:8501`
+- active_agents: `Desktop Compose Hermes API Server eia-desktop-hermes-1, provider:custom:eia-managed, model:gpt-5.6-terra, terminal:local in Controller container`; `Desktop Compose backend eia-desktop-backend-1 on http://127.0.0.1:8501`
 
 > 当前主任务为双版本交付。恢复时依次读取 `.state/dual_edition_plan.md`、`logs/dual_edition_20260719.md` 和 `outputs/双版本系统实施计划与验收标准.md`，再从当前 `next_step` 继续。
 
@@ -103,6 +103,8 @@
 - 历史运行日志与报告产物，仅保留 `.gitkeep`
 
 ## Change Log
+
+- 2026-07-19 Asia/Shanghai: `MODEL-COMPARISON-01` 完成。按用户要求将 `deploy/desktop/.env` 的 `OPENAI_MODEL` 切换为 `gpt-5.6-terra`，保持 API URL、Key 和任务资料不变；通过 `deploy/desktop/lib.sh` 的环境隔离包装器仅重建 Hermes，确认容器实际模型为 `gpt-5.6-terra`、URL 为 `https://api.aiboys.xyz/v1`，backend/Hermes healthy。未自动重跑当前任务，等待用户使用相同 HB-PT-002 流程进行模型对照测试。详见 `logs/model_switch_20260719.md`。
 
 - 2026-07-19 Asia/Shanghai: `DIAGNOSE-PREMATURE-STOP-01` 完成，仅只读诊断、未修改执行代码或任务。任务 `3e66d0a2-9e8b-42f1-b02d-6401a85a8bb0` 的 `HB-PT-002` 再次只输出“继续完成……核验……”后被推进。根因不是上下文过长：run `run_9354a3c1cd9f471694736cf49d81fea2` 共 5/60 次 API 调用，最后一次输入 35,004 token，而 Hermes 对 Grok 采用 500,000 token 窗口，且节点启动 `history=0`、无压缩事件；`157,088 input_tokens` 是 5 次调用累计。第 5 次模型返回 37 字符普通文本并以 `finish_reason=stop` 结束，Hermes 按 `text_response` clean completion 退出。Hermes 源码已明确记录模型“叙述下一步后 stop”的已知行为，但其 stop guard 只用于 Kanban worker，Runs API EIA 节点未启用。业务后端又无条件将 `run.completed` 当节点完成，并在缺少 Agent 成果文件时用短文本 fallback 生成 `.md/.json`，因此错误推进。后续从 `IMPLEMENT_EIA_NODE_COMPLETION_GATE` 增加显式成果完成门禁/有限 nudge，过程句或缺成果必须失败停止。详见 `logs/hermes_premature_stop_20260719.md`。
 
