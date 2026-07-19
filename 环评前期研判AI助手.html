@@ -1,0 +1,2273 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>环评前期研判AI助手 — 君邦环境</title>
+<script src="https://cdn.jsdelivr.net/npm/mammoth@1.6.0/mammoth.browser.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
+<style>
+  :root { --primary: #1a5276; --primary-light: #2980b9; --success: #27ae60; --warning: #f39c12; --danger: #e74c3c; --bg: #f0f2f5; --card: #fff; --border: #dce1e6; --text: #333; --text-muted: #888; --radius: 8px; --shadow: 0 2px 8px rgba(0,0,0,0.08); }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "Microsoft YaHei", sans-serif; background: var(--bg); color: var(--text); line-height: 1.6; }
+  .app-header { background: linear-gradient(135deg, var(--primary), var(--primary-light)); color: #fff; padding: 14px 24px; display: flex; align-items: center; justify-content: space-between; box-shadow: 0 2px 12px rgba(0,0,0,0.15); position: sticky; top: 0; z-index: 100; }
+  .app-header h1 { font-size: 20px; font-weight: 600; }
+  .app-header .sub { font-size: 12px; opacity: 0.85; margin-top: 2px; }
+  .header-actions { display: flex; gap: 10px; align-items: center; }
+  .app-layout { display: flex; height: calc(100vh - 62px); }
+  .sidebar { width: 260px; background: var(--card); border-right: 1px solid var(--border); overflow-y: auto; padding: 12px 0; flex-shrink: 0; }
+  .sidebar-section { padding: 8px 16px; font-size: 11px; color: var(--text-muted); font-weight: 600; letter-spacing: 0.5px; display: flex; align-items: center; justify-content: space-between; }
+  .sidebar-section .badge { font-size: 10px; background: var(--primary-light); color: #fff; padding: 1px 7px; border-radius: 8px; font-weight: normal; }
+  .step-item { display: flex; align-items: center; gap: 10px; padding: 10px 16px; cursor: pointer; border-left: 3px solid transparent; transition: all 0.2s; font-size: 13px; }
+  .step-item:hover { background: #f5f7fa; }
+  .step-item.active { background: #e3f0fa; border-left-color: var(--primary-light); font-weight: 600; }
+  .step-item.done { color: var(--success); }
+  .step-item .step-num { width: 24px; height: 24px; border-radius: 50%; background: #e0e0e0; display: flex; align-items: center; justify-content: center; font-size: 11px; font-weight: bold; flex-shrink: 0; }
+  .step-item.active .step-num { background: var(--primary-light); color: #fff; }
+  .step-item.done .step-num { background: var(--success); color: #fff; }
+  .step-item .step-status { font-size: 10px; margin-left: auto; }
+  .main-area { flex: 1; display: flex; flex-direction: column; overflow: hidden; }
+  .main-content { flex: 1; overflow-y: auto; padding: 20px 24px; }
+  .card { background: var(--card); border-radius: var(--radius); box-shadow: var(--shadow); padding: 20px; margin-bottom: 16px; }
+  .card h2 { font-size: 16px; margin-bottom: 12px; color: var(--primary); display: flex; align-items: center; gap: 8px; }
+  .card h2 .badge { font-size: 11px; padding: 2px 8px; border-radius: 10px; font-weight: normal; }
+  .badge-new { background: #e8f5e9; color: var(--success); }
+  .badge-core { background: #e3f2fd; color: var(--primary-light); }
+  .badge-warn { background: #fff3cd; color: #856404; }
+  .form-group { margin-bottom: 14px; }
+  .form-group label { display: block; font-size: 13px; font-weight: 600; margin-bottom: 4px; color: #555; }
+  .form-group .hint { font-size: 11px; color: var(--text-muted); margin-bottom: 4px; }
+  textarea { width: 100%; min-height: 120px; padding: 10px; border: 1px solid var(--border); border-radius: 6px; font-size: 13px; font-family: inherit; resize: vertical; line-height: 1.5; }
+  textarea:focus { outline: none; border-color: var(--primary-light); box-shadow: 0 0 0 3px rgba(41,128,185,0.1); }
+  input[type="text"], input[type="password"], select { width: 100%; padding: 8px 10px; border: 1px solid var(--border); border-radius: 6px; font-size: 13px; }
+  input:focus, select:focus { outline: none; border-color: var(--primary-light); }
+  .btn { padding: 8px 18px; border: none; border-radius: 6px; font-size: 13px; cursor: pointer; font-weight: 500; transition: all 0.2s; display: inline-flex; align-items: center; gap: 6px; }
+  .btn-primary { background: var(--primary-light); color: #fff; }
+  .btn-primary:hover { background: var(--primary); }
+  .btn-primary:disabled { background: #b0c4d8; cursor: not-allowed; }
+  .btn-success { background: var(--success); color: #fff; }
+  .btn-success:hover { background: #219a52; }
+  .btn-outline { background: #fff; border: 1px solid var(--border); color: #555; }
+  .btn-outline:hover { background: #f5f7fa; }
+  .btn-danger { background: #fff; border: 1px solid var(--danger); color: var(--danger); }
+  .btn-danger:hover { background: #fef0f0; }
+  .btn-sm { padding: 4px 12px; font-size: 12px; }
+  .btn-xs { padding: 2px 8px; font-size: 11px; }
+  .btn-group { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 12px; }
+  .result-box { background: #f9fafb; border: 1px solid var(--border); border-radius: 6px; padding: 14px; font-size: 13px; white-space: pre-wrap; max-height: 500px; overflow-y: auto; line-height: 1.6; margin-top: 10px; }
+  .result-box.loading { color: var(--text-muted); font-style: italic; }
+  .result-box.error { color: var(--danger); background: #fef0f0; border-color: #f5c6cb; }
+  .toast { position: fixed; top: 20px; right: 20px; padding: 12px 20px; border-radius: 6px; color: #fff; font-size: 13px; z-index: 999; animation: slideIn 0.3s; box-shadow: 0 4px 12px rgba(0,0,0,0.2); }
+  .toast.success { background: var(--success); }
+  .toast.error { background: var(--danger); }
+  .toast.info { background: var(--primary-light); }
+  @keyframes slideIn { from { transform: translateX(100%); opacity: 0; } to { transform: translateX(0); opacity: 1; } }
+  .api-config { display: flex; gap: 10px; align-items: flex-end; flex-wrap: wrap; }
+  .api-config .form-group { flex: 1; min-width: 200px; margin-bottom: 0; }
+  
+  /* KB styles */
+  .kb-list { display: flex; flex-direction: column; gap: 6px; }
+  .kb-item { display: flex; align-items: center; gap: 10px; padding: 10px 14px; border: 1px solid var(--border); border-radius: 6px; transition: all 0.2s; cursor: pointer; }
+  .kb-item:hover { border-color: var(--primary-light); background: #f8fafe; }
+  .kb-item.selected { border-color: var(--success); background: #f0faf3; }
+  .kb-item .kb-check { width: 18px; height: 18px; border: 2px solid #ccc; border-radius: 4px; flex-shrink: 0; display: flex; align-items: center; justify-content: center; font-size: 11px; color: #fff; }
+  .kb-item.selected .kb-check { background: var(--success); border-color: var(--success); }
+  .kb-item .kb-info { flex: 1; min-width: 0; }
+  .kb-item .kb-name { font-size: 14px; font-weight: 500; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .kb-item .kb-meta { font-size: 11px; color: var(--text-muted); margin-top: 2px; }
+  .kb-item .kb-actions { display: flex; gap: 4px; flex-shrink: 0; }
+  .kb-tag { display: inline-block; font-size: 10px; padding: 1px 8px; border-radius: 10px; margin-right: 4px; }
+  .kb-tag-法规 { background: #e3f2fd; color: #1565c0; }
+  .kb-tag-导则 { background: #f3e5f5; color: #7b1fa2; }
+  .kb-tag-审批 { background: #e8f5e9; color: #2e7d32; }
+  .kb-tag-准入 { background: #fff3e0; color: #e65100; }
+  .kb-tag-规划 { background: #e0f7fa; color: #00695c; }
+  .kb-tag-其他 { background: #f5f5f5; color: #616161; }
+  .kb-stats { display: flex; gap: 16px; flex-wrap: wrap; margin-bottom: 16px; }
+  .kb-stat { padding: 8px 16px; background: #f5f7fa; border-radius: 6px; font-size: 12px; }
+  .kb-stat strong { color: var(--primary-light); font-size: 16px; }
+  .kb-empty { text-align: center; padding: 40px; color: var(--text-muted); }
+  .kb-search { width: 100%; margin-bottom: 12px; }
+  .modal-overlay { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.4); z-index: 200; display: flex; align-items: center; justify-content: center; }
+  .modal { background: #fff; border-radius: var(--radius); padding: 24px; width: 90%; max-width: 700px; max-height: 85vh; overflow-y: auto; box-shadow: 0 8px 32px rgba(0,0,0,0.2); }
+  .modal h3 { margin-bottom: 16px; font-size: 16px; }
+  .modal .close { float: right; cursor: pointer; font-size: 20px; color: #999; background: none; border: none; }
+  .modal .close:hover { color: #333; }
+  .file-drop-zone { border: 2px dashed var(--border); border-radius: 8px; padding: 30px; text-align: center; cursor: pointer; transition: all 0.2s; margin-bottom: 12px; }
+  .file-drop-zone:hover { border-color: var(--primary-light); background: #f8fafe; }
+  .file-drop-zone.dragover { border-color: var(--success); background: #f0faf3; }
+  .file-drop-zone input { display: none; }
+  
+  .kb-select-bar { display: flex; align-items: center; gap: 10px; padding: 10px 14px; background: #f0faf3; border: 1px solid #c8e6c9; border-radius: 6px; margin-bottom: 12px; font-size: 12px; }
+  .kb-select-bar .count { font-weight: 600; color: var(--success); }
+  
+  @media (max-width: 768px) {
+    .app-layout { flex-direction: column; }
+    .sidebar { width: 100%; border-right: none; border-bottom: 1px solid var(--border); max-height: 200px; }
+    .main-content { padding: 12px; }
+    .modal { width: 95%; padding: 16px; }
+  }
+</style>
+</head>
+<body>
+
+<div class="app-header">
+  <div>
+    <h1>环评前期研判AI助手</h1>
+    <div class="sub">湖北君邦环境技术有限责任公司 · 企业园区管家事业部 · V4.0（含参考资料库+联网检索+有效性检查）</div>
+  </div>
+  <div class="header-actions">
+    <button class="btn btn-outline btn-sm" onclick="resetAll()" style="color:#000;border-color:rgba(255,255,255,0.4)">重置</button>
+    <button class="btn btn-outline btn-sm" onclick="exportReport()" style="color:#000;border-color:rgba(255,255,255,0.4)" id="btnExport" disabled>导出报告</button>
+  </div>
+</div>
+
+<div class="app-layout">
+  <div class="sidebar" id="sidebar">
+    <div class="sidebar-section">
+      参考资料<span class="badge" id="refCount">0</span>
+    </div>
+    <div class="step-item" data-step="-3" onclick="switchStep(-3)">
+      <span class="step-num" style="background:#16a085;color:#fff;">R</span><span>参考资料库</span><span class="step-status"></span><span class="badge" id="localFileCount" style="font-size:10px;background:#16a085;color:#fff;padding:1px 7px;border-radius:8px;margin-left:auto;">0</span>
+    </div>
+    <div class="step-item" data-step="-2" onclick="switchStep(-2)">
+      <span class="step-num" style="background:#e67e22;color:#fff;">S</span><span>联网检索</span><span class="step-status"></span>
+    </div>
+    <div class="sidebar-section">研判工作流</div>
+    <div class="step-item" data-step="0" onclick="switchStep(0)">
+      <span class="step-num">0</span><span>API配置</span><span class="step-status"></span>
+    </div>
+    <div class="step-item" data-step="1" onclick="switchStep(1)">
+      <span class="step-num">1</span><span>项目信息输入</span><span class="step-status"></span>
+    </div>
+    <div class="step-item" data-step="2" onclick="switchStep(2)">
+      <span class="step-num">2</span><span>HB-PT-000 资料审查</span><span class="step-status"></span>
+    </div>
+    <div class="step-item" data-step="3" onclick="switchStep(3)">
+      <span class="step-num">3</span><span>HB-PT-001 项目概况提取</span><span class="step-status"></span>
+    </div>
+    <div class="sidebar-section">专项研判</div>
+    <div class="step-item" data-step="4" onclick="switchStep(4)"><span class="step-num">4</span><span>行业类别与环评类别</span><span class="step-status"></span></div>
+    <div class="step-item" data-step="5" onclick="switchStep(5)"><span class="step-num">5</span><span>产业政策符合性分析</span><span class="step-status"></span></div>
+    <div class="step-item" data-step="6" onclick="switchStep(6)"><span class="step-num">6</span><span>规划及规划环评</span><span class="step-status"></span></div>
+    <div class="step-item" data-step="7" onclick="switchStep(7)"><span class="step-num">7</span><span>生态环境分区管控</span><span class="step-status"></span></div>
+    <div class="step-item" data-step="8" onclick="switchStep(8)"><span class="step-num">8</span><span>长江保护及岸线管控</span><span class="step-status"></span></div>
+    <div class="step-item" data-step="9" onclick="switchStep(9)"><span class="step-num">9</span><span>两高/化工项目</span><span class="step-status"></span></div>
+    <div class="step-item" data-step="10" onclick="switchStep(10)"><span class="step-num">10</span><span>行业审批原则</span><span class="step-status"></span></div>
+    <div class="step-item" data-step="11" onclick="switchStep(11)"><span class="step-num">11</span><span>同类项目借鉴</span><span class="step-status"></span></div>
+    <div class="sidebar-section">汇总与核查</div>
+    <div class="step-item" data-step="12" onclick="switchStep(12)"><span class="step-num">12</span><span>HB-PT-010 综合研判报告</span><span class="step-status"></span></div>
+    <div class="step-item" data-step="13" onclick="switchStep(13)"><span class="step-num">13</span><span>HB-PT-011 交叉核查</span><span class="step-status"></span></div>
+  </div>
+  <div class="main-area">
+    <div class="main-content" id="mainContent"></div>
+  </div>
+</div>
+<div id="toastContainer"></div>
+<div id="modalContainer"></div>
+
+<script>
+// ============ KB CATEGORIES ============
+const KB_CATEGORIES = ['政策法规', '技术导则', '审批原则', '行业准入', '园区规划', '其他'];
+const CATEGORY_COLORS = { '政策法规': '#1565c0', '技术导则': '#7b1fa2', '审批原则': '#2e7d32', '行业准入': '#e65100', '园区规划': '#00695c', '其他': '#616161' };
+
+// ============ STATE ============
+const state = {
+  apiKey: localStorage.getItem('hb_api_key') || '',
+  apiBase: localStorage.getItem('hb_api_base') || 'https://api.deepseek.com/v1',
+  model: localStorage.getItem('hb_model') || 'deepseek-chat',
+  projectInfo: localStorage.getItem('hb_project_info') || '',
+  knowledgeBase: localStorage.getItem('hb_knowledge_base') || '',
+  extraFiles: { planning: localStorage.getItem('hb_extra_planning') || '', threeLines: localStorage.getItem('hb_extra_threeLines') || '', industryPrinciple: localStorage.getItem('hb_extra_industryPrinciple') || '', similarReport: localStorage.getItem('hb_extra_similarReport') || '' },
+  results: JSON.parse(localStorage.getItem('hb_results') || '{}'),
+  currentStep: parseInt(localStorage.getItem('hb_step') || '0'),
+  // KB state (deprecated, will be migrated to localFiles)
+  kbEntries: JSON.parse(localStorage.getItem('hb_kb_entries') || '[]'),
+  selectedKbIds: [],
+  // Search state
+  searchApiUrl: localStorage.getItem('hb_search_api_url') || '',
+  searchApiKey: localStorage.getItem('hb_search_api_key') || '',
+  searchResults: JSON.parse(localStorage.getItem('hb_search_results') || 'null'),
+  searchContext: localStorage.getItem('hb_search_context') || '', // 用户选中的搜索结果内容，可注入研判
+  // KB validity state
+  kbValidityResults: JSON.parse(localStorage.getItem('hb_kb_validity') || '{}'),
+  // Auto search
+  autoSearch: localStorage.getItem('hb_auto_search') !== 'false', // 默认开启
+  // Local files
+  localFiles: JSON.parse(localStorage.getItem('hb_local_files') || '[]'),
+};
+
+function saveState() {
+  localStorage.setItem('hb_api_key', state.apiKey);
+  localStorage.setItem('hb_api_base', state.apiBase);
+  localStorage.setItem('hb_model', state.model);
+  localStorage.setItem('hb_project_info', state.projectInfo);
+  localStorage.setItem('hb_knowledge_base', state.knowledgeBase);
+  localStorage.setItem('hb_extra_planning', state.extraFiles.planning);
+  localStorage.setItem('hb_extra_threeLines', state.extraFiles.threeLines);
+  localStorage.setItem('hb_extra_industryPrinciple', state.extraFiles.industryPrinciple);
+  localStorage.setItem('hb_extra_similarReport', state.extraFiles.similarReport);
+  localStorage.setItem('hb_results', JSON.stringify(state.results));
+  localStorage.setItem('hb_step', state.currentStep);
+  localStorage.setItem('hb_kb_entries', JSON.stringify(state.kbEntries));
+  localStorage.setItem('hb_selected_kb_ids', JSON.stringify(state.selectedKbIds));
+  localStorage.setItem('hb_search_api_url', state.searchApiUrl);
+  localStorage.setItem('hb_search_api_key', state.searchApiKey);
+  localStorage.setItem('hb_search_results', JSON.stringify(state.searchResults));
+  localStorage.setItem('hb_search_context', state.searchContext);
+  localStorage.setItem('hb_kb_validity', JSON.stringify(state.kbValidityResults));
+  localStorage.setItem('hb_auto_search', state.autoSearch);
+  localStorage.setItem('hb_local_files', JSON.stringify(state.localFiles));
+  const refCountEl = document.getElementById('refCount');
+  if (refCountEl) refCountEl.textContent = state.localFiles.length;
+}
+
+// ============ SYSTEM PROMPT ============
+const SYSTEM_PROMPT = `你是一位资深的环境影响评价工程师，具有15年以上环评咨询经验，精通建设项目环境影响评价相关法律法规、技术导则和审批流程。你的工作职责包括：
+
+1. 角色定位：你作为"环评研判助手"，辅助环评工程师进行项目前期准入分析，不做最终决策，所有结论需标注"人工复核"提示。
+
+2. 行为准则：
+   - 严格基于用户提供的项目资料和参考资料库内容进行分析判断，不得凭空编造或猜测；
+   - 参考资料库中的文件作为主要判断依据，但当遇到模棱两可、无法确定的情况时（如行业类别匹配多个选项、政策条款存在歧义、文件有效性存疑等），应同步参考联网检索结果中的官方回复和解读进行交叉验证，并在结论中注明引用来源；
+   - 若参考资料库中缺乏相关信息，以联网检索结果作为主要分析依据；若两者均无相关信息，请如实说明"参考资料库和联网检索中均未找到相关内容，建议人工核实"，不得编造；
+   - 引用政策法规时，必须注明文件全称、文号（如有）和具体条款；
+   - 不得编造废止文件、替代文件或条款号。
+
+3. 输出规范：
+   - 采用结构化格式输出，每个研判维度独立成段；
+   - 结论前置，先给出判断结论，再列出依据和风险提示；
+   - 所有输出内容末尾标注"【以上分析由AI辅助生成，最终结论需经环评工程师人工复核确认】"。`;
+
+// ============ PROMPT TEMPLATES (unchanged from V2) ============
+const PROMPTS = {
+  'HB-PT-000': (projectInfo) => `请根据以下原始项目信息，审查资料完整性并确定应启动的研判模块：
+
+原始项目信息：
+${projectInfo}
+
+请按以下结构输出：
+
+一、资料完整性审查
+  □ 项目名称：{已提供/未提供}
+  □ 建设地点（省/市/区/街道/园区）：{已提供/未提供}
+  □ 所在工业园区名称：{已提供/未提供}
+  □ 是否位于合规化工园区：{已提供/未提供/不涉及}
+  □ 环境管控单元编码：{已提供/未提供}
+  □ 环境管控单元名称：{已提供/未提供}
+  □ 产品方案：{已提供/未提供}
+  □ 生产工艺：{已提供/未提供}
+  □ 原辅材料：{已提供/未提供}
+  □ 用地性质：{已提供/未提供}
+  □ 是否涉及长江流域或敏感区域：{已提供/未提供/需核实}
+  □ 能耗情况：{已提供/未提供，未提供时列为后续补充}
+  □ 排污去向：{已提供/未提供，未提供时列为后续补充}
+
+二、模块启动建议
+  根据已有资料，建议启动以下模块：
+  □ HB-PT-001 项目概况提取 — {建议启动/暂缓，原因}
+  □ HB-PT-002 行业类别、环评类别及审批路径判定 — {建议启动/暂缓，原因}
+  □ HB-PT-003 产业政策符合性分析 — {建议启动/暂缓，原因}
+  □ HB-PT-004 规划及规划环评符合性分析 — {建议启动/暂缓，原因}
+  □ HB-PT-005 生态环境分区管控符合性分析 — {建议启动/暂缓，原因}
+  □ HB-PT-006 长江保护及岸线管控符合性分析 — {建议启动/暂缓，原因}
+  □ HB-PT-007 "两高"项目或化工项目管理要求符合性分析 — {建议启动/暂缓，原因}
+  □ HB-PT-008 行业环评审批原则符合性分析 — {建议启动/暂缓，原因}
+  □ HB-PT-009 同类项目污染节点与治理措施借鉴分析 — {建议启动/暂缓，原因}
+
+三、优先补充资料清单
+  {列出前期研判最急需补充的资料项，按优先级排序}
+
+【以上分析由AI辅助生成，最终结论需经环评工程师人工复核确认】`,
+  'HB-PT-001': (projectInfo) => `请根据以下项目材料，提取并整理项目概况信息，按以下结构输出。注意：能耗情况、排污去向如未提供，标注"未提供，需后续补充"，不作为阻断项。
+
+材料内容：
+${projectInfo}
+
+输出要求：
+一、项目基本信息
+  - 项目名称：（全称）
+  - 建设单位：（全称）
+  - 建设地点：（省/市/区/街道/园区，精确到地块编号）
+  - 建设性质：（新建/改建/扩建/技术改造）
+  - 项目投资：（总投资额，其中环保投资额及占比）
+  - 用地面积及用地性质：（总用地面积，新增用地面积，用地性质）
+
+二、建设内容与规模
+  - 主要产品及产能：（产品名称、年产量）
+  - 主要生产工艺：（简述工艺流程，标注关键产污环节）
+  - 主要原辅材料：（名称、年用量、储存方式）
+  - 主要生产设备：（名称、型号、数量）
+
+三、园区与环境管控信息
+  - 所在工业园区名称：
+  - 是否位于合规化工园区：（是/否/不涉及）
+  - 环境管控单元编码：（如有）
+  - 环境管控单元名称：（如有）
+  - 园区规划环评情况：（是否已完成规划环评、批复文号）
+  - 园区基础设施：（污水处理厂、供热设施等）
+
+四、能耗与排放概况（前期如未提供，标注"未提供，需后续补充"）
+  - 能源消耗/主要污染物/排污去向/污染治理措施
+
+五、区域敏感信息
+六、需补充资料清单
+
+【以上分析由AI辅助生成，最终结论需经环评工程师人工复核确认】`,
+  'HB-PT-002': (projectOverview) => `请根据以下项目信息，参照《国民经济行业分类》（GB/T 4754-2017）和《建设项目环境影响评价分类管理名录》（2021年版），完成以下判定：
+
+项目信息：
+${projectOverview}
+
+请按以下结构输出分析结果：
+
+一、国民经济行业类别判定
+二、环评类别判定（报告书/报告表/登记表）
+三、审批路径判定（审批权限/审批层级 + 审批程序）
+四、绩效评级行业识别
+五、风险提示与建议
+
+【以上分析由AI辅助生成，最终结论需经环评工程师人工复核确认】`,
+  'HB-PT-003': (projectOverview) => `请根据以下项目信息，对照《产业结构调整指导目录》（2024年本）及相关产业政策文件，进行产业政策符合性分析。
+
+项目信息：
+${projectOverview}
+
+请按以下结构输出分析结果：
+
+一、产业政策符合性总判断（鼓励类/允许类/限制类/淘汰类）
+二、《产业结构调整指导目录》对照分析
+三、行业准入条件符合性分析
+四、市场准入负面清单符合性
+五、风险提示与建议
+
+【以上分析由AI辅助生成，最终结论需经环评工程师人工复核确认】`,
+  'HB-PT-004': (projectOverview, extra) => `请根据以下项目信息，对照所在区域的规划及规划环评文件，进行规划符合性分析：
+
+项目信息：
+${projectOverview}
+
+所在区域规划文件：
+${extra || '（参考资料库中未找到本区域规划文件，请以联网检索结果为主要依据；如检索结果不足以支撑判断，请如实说明并标注需人工补充）'}
+
+请按以下结构输出分析结果：
+
+一、规划符合性总判断
+二、总体规划符合性（用地性质、产业定位、选址）
+三、规划环评符合性（准入清单、负面清单、总量控制）
+四、基础设施建设条件符合性
+五、风险提示与建议
+
+【以上分析由AI辅助生成，最终结论需经环评工程师人工复核确认】`,
+  'HB-PT-005': (projectOverview, extra) => `请根据以下项目信息，对照所在区域的生态环境分区管控（"三线一单"）要求，进行符合性分析：
+
+项目信息：
+${projectOverview}
+
+所在区域"三线一单"文件：
+${extra || '（参考资料库中未找到本区域"三线一单"文件，请以联网检索结果为主要依据；如检索结果不足以支撑判断，请如实说明并标注需人工补充）'}
+
+请按以下结构输出：一、总判断+管控单元信息 / 二、生态保护红线 / 三、环境质量底线 / 四、资源利用上线 / 五、准入清单 / 六、风险提示
+
+【以上分析由AI辅助生成，最终结论需经环评工程师人工复核确认】`,
+  'HB-PT-006': (projectOverview) => `请根据以下项目信息，对照《中华人民共和国长江保护法》及相关配套法规，进行长江保护及岸线管控符合性分析：
+
+项目信息：
+${projectOverview}
+
+请按以下结构输出：一、适用性判断 / 二、岸线管控 / 三、产业布局 / 四、水污染防治 / 五、生态保护 / 六、资源保护 / 七、风险提示
+
+【以上分析由AI辅助生成，最终结论需经环评工程师人工复核确认】`,
+  'HB-PT-007': (projectOverview) => `请根据以下项目信息，对照"两高"项目及化工项目管理相关政策文件，进行符合性分析：
+
+项目信息：
+${projectOverview}
+
+请按以下结构输出：一、两高项目判定 / 二、化工项目判定 / 三、两高管理要求 / 四、化工管理要求 / 五、风险提示
+
+【以上分析由AI辅助生成，最终结论需经环评工程师人工复核确认】`,
+  'HB-PT-008': (projectOverview, extra) => `请根据以下项目信息，对照该行业建设项目环境影响评价文件审批原则，进行行业审批原则符合性分析：
+
+项目信息：
+${projectOverview}
+
+行业审批原则文件：
+${extra || '（参考资料库中未找到该行业审批原则文件，请以联网检索结果为主要依据；如检索结果不足以支撑判断，请如实说明并标注需人工补充）'}
+
+请按以下结构输出：一、总判断 / 二、选址与布局 / 三、工艺与装备 / 四、污染防治 / 五、环境风险 / 六、总量控制 / 七、风险提示
+
+【以上分析由AI辅助生成，最终结论需经环评工程师人工复核确认】`,
+  'HB-PT-009': (projectOverview, extra) => `请根据以下同类项目环评报告内容，审查并梳理主要污染排放节点和治理措施，为新建项目提供借鉴：
+
+同类项目环评报告：
+${extra || '（参考资料库中未找到同类项目报告，请以联网检索结果为主要依据；如检索结果不足以支撑判断，请如实说明并标注需人工补充）'}
+
+新建项目信息：
+${projectOverview}
+
+请按以下结构输出：一、同类项目概况对比 / 二、废气污染节点 / 三、废水污染节点 / 四、固废产生节点 / 五、噪声源 / 六、总结与建议
+
+【以上分析由AI辅助生成，最终结论需经环评工程师人工复核确认】`,
+  'HB-PT-010': (allResults) => {
+    let parts = [];
+    for (let i = 1; i <= 9; i++) { const code = `HB-PT-00${i}`; if (allResults[code]) parts.push(`${code} 结果：\n${allResults[code]}\n`); }
+    return `请根据以下各专项模块输出结果，整合生成一份完整的环评前期研判报告，要求结构清晰、结论明确，可直接用于内部技术会审。
+
+${parts.join('\n---\n')}
+
+请按以下结构生成：
+═══════════════════════════════════
+       环评前期研判报告
+═══════════════════════════════════
+一、项目概况
+二、综合研判结论（总体准入判断 + 各维度研判结论汇总表）
+三、关键风险提示
+四、政策有效性风险提示
+五、综合承接建议
+六、需补充资料汇总清单
+七、人工复核要点
+
+【以上分析由AI辅助生成，最终结论需经环评工程师人工复核确认】`;
+  },
+  'HB-PT-011': (allResults) => {
+    let parts = [];
+    for (let i = 1; i <= 9; i++) { const code = `HB-PT-00${i}`; if (allResults[code]) parts.push(`${code} 结果：\n${allResults[code]}\n`); }
+    const report010 = allResults['HB-PT-010'] || '';
+    return `请根据以下各专项模块输出结果，进行交叉一致性核查，并生成人工复核清单。
+
+综合研判报告：
+${report010}
+
+各专项模块输出：
+${parts.join('\n---\n')}
+
+请按以下结构输出：
+一、交叉一致性核查（6项核查）
+二、矛盾项汇总
+三、人工复核清单（至少15项，表格格式）
+四、最终质量评估
+
+【以上分析由AI辅助生成，最终结论需经环评工程师人工复核确认】`;
+  }
+};
+
+const MODULE_LABELS = {
+  'HB-PT-000': '资料完整性审查与模块选择', 'HB-PT-001': '项目概况提取',
+  'HB-PT-002': '行业类别、环评类别及审批路径判定', 'HB-PT-003': '产业政策符合性分析',
+  'HB-PT-004': '规划及规划环评符合性分析', 'HB-PT-005': '生态环境分区管控符合性分析',
+  'HB-PT-006': '长江保护及岸线管控符合性分析', 'HB-PT-007': '两高项目或化工项目管理要求符合性分析',
+  'HB-PT-008': '行业环评审批原则符合性分析', 'HB-PT-009': '同类项目污染节点与治理措施借鉴分析',
+  'HB-PT-010': '综合研判报告生成', 'HB-PT-011': '交叉一致性核查与人工复核清单生成',
+};
+
+const MODULE_EXTRAS = { 'HB-PT-004': 'planning', 'HB-PT-005': 'threeLines', 'HB-PT-008': 'industryPrinciple', 'HB-PT-009': 'similarReport' };
+
+// ============ API CALL ============
+async function callDeepSeek(systemPrompt, userPrompt) {
+  const response = await fetch(`${state.apiBase}/chat/completions`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${state.apiKey}` },
+    body: JSON.stringify({ model: state.model, messages: [{ role: 'system', content: systemPrompt }, { role: 'user', content: userPrompt }], temperature: 0.3, max_tokens: 4096 }),
+  });
+  if (!response.ok) { const err = await response.json().catch(() => ({})); throw new Error(err.error?.message || `API请求失败 (${response.status})`); }
+  const data = await response.json();
+  return data.choices[0].message.content;
+}
+
+// ============ KB HELPERS ============
+function getSelectedKbContent() {
+  const selected = state.kbEntries.filter(e => state.selectedKbIds.includes(e.id));
+  if (selected.length === 0) return '';
+  return selected.map(e => `【${e.category}】${e.name}\n${e.content}`).join('\n\n---\n\n');
+}
+
+function buildFullSystemPrompt() {
+  let prompt = SYSTEM_PROMPT;
+  if (state.knowledgeBase) {
+    prompt += `\n\n【项目补充参考材料】\n${state.knowledgeBase}`;
+  }
+  if (state.searchContext) {
+    prompt += `\n\n【联网检索结果——以下为针对当前研判问题从互联网检索到的官方回复和解读文件，请基于这些信息辅助判断】\n${state.searchContext}`;
+  }
+  // 参考资料库自动注入（含手动添加的文本条目和本地文件）
+  if (state.localFiles.length > 0) {
+    const groups = {};
+    state.localFiles.forEach(f => {
+      const label = f.folderLabel || '未分类';
+      if (!groups[label]) groups[label] = [];
+      groups[label].push(f);
+    });
+    const fileContent = Object.entries(groups).map(([label, files]) => 
+      `### ${label}\n` + files.map(f => `【文件：${f.name}（${f.type || '手动添加'}）】\n${f.content}`).join('\n\n')
+    ).join('\n\n---\n\n');
+    prompt += `\n\n【参考资料库——以下为用户加载的参考文件和政策法规，按分类整理，请基于这些材料进行分析判断】\n${fileContent}`;
+  }
+  return prompt;
+}
+
+// ============ UI HELPERS ============
+function toast(msg, type = 'info') {
+  const container = document.getElementById('toastContainer');
+  const el = document.createElement('div'); el.className = `toast ${type}`; el.textContent = msg;
+  container.appendChild(el); setTimeout(() => el.remove(), 3000);
+}
+
+function updateSidebar() {
+  document.querySelectorAll('.step-item').forEach(el => {
+    const step = parseInt(el.dataset.step);
+    el.classList.remove('active', 'done');
+    if (step === state.currentStep) el.classList.add('active');
+    if (step >= 0 && step < state.currentStep) el.classList.add('done');
+  });
+  // Update module result statuses
+  for (let i = 0; i <= 11; i++) {
+    const code = `HB-PT-${String(i).padStart(3, '0')}`;
+    const stepEl = document.querySelector(`.step-item[data-step="${i + 2}"]`);
+    if (stepEl && state.results[code]) { stepEl.classList.add('done'); stepEl.querySelector('.step-status').textContent = '✓'; }
+  }
+  if (state.results['HB-PT-010']) { const el = document.querySelector('.step-item[data-step="12"]'); if (el) { el.classList.add('done'); el.querySelector('.step-status').textContent = '✓'; } }
+  if (state.results['HB-PT-011']) { const el = document.querySelector('.step-item[data-step="13"]'); if (el) { el.classList.add('done'); el.querySelector('.step-status').textContent = '✓'; } }
+  document.getElementById('btnExport').disabled = !state.results['HB-PT-010'];
+  const lfcEl = document.getElementById('localFileCount');
+  if (lfcEl) lfcEl.textContent = state.localFiles.length;
+}
+
+function switchStep(step) { state.currentStep = step; saveState(); renderStep(); updateSidebar(); }
+
+function renderStep() {
+  const c = document.getElementById('mainContent');
+  const s = state.currentStep;
+  if (s === -3) return renderLocalFiles(c);
+  if (s === -2) return renderSearchPanel(c);
+  if (s === -1) { state.currentStep = -3; return renderLocalFiles(c); } // redirect legacy KB
+  if (s === 0) return renderApiConfig(c);
+  if (s === 1) return renderProjectInput(c);
+  if (s >= 2 && s <= 11) return renderModuleStep(c, s - 2);
+  if (s === 12) return renderModuleStep(c, 10);
+  if (s === 13) return renderModuleStep(c, 11);
+}
+
+// ============ LOCAL FILES ============
+function renderLocalFiles(container) {
+  const files = state.localFiles;
+  const totalSize = files.reduce((s, f) => s + (f.size || 0), 0);
+  
+  // 按分类标签分组
+  const groups = {};
+  files.forEach(f => {
+    const label = f.folderLabel || '未分类';
+    if (!groups[label]) groups[label] = [];
+    groups[label].push(f);
+  });
+  
+  const listHtml = files.length === 0
+    ? `<div class="kb-empty">尚未加载本地文件。点击下方按钮或拖拽文件到此处。</div>`
+    : Object.entries(groups).map(([label, groupFiles]) => `
+      <div style="margin-bottom:10px;">
+        <div style="font-size:12px;font-weight:600;color:var(--primary-light);padding:4px 0;display:flex;align-items:center;gap:8px;">
+          <span style="background:#e0f2f1;padding:2px 10px;border-radius:10px;">${escapeHtml(label)}</span>
+          <span style="color:#999;font-weight:normal;">${groupFiles.length} 个文件</span>
+          <button class="btn btn-xs btn-outline" onclick="removeLocalFileGroup('${escapeHtml(label)}')" style="margin-left:auto;">移除此组</button>
+        </div>
+        ${groupFiles.map(f => `
+          <div class="kb-item">
+            <div class="kb-info">
+              <div class="kb-name">${fileIcon(f.type)} ${escapeHtml(f.name)} ${validityBadge(f.validity ? f.validity.status : null)}</div>
+              <div class="kb-meta">
+                ${formatSize(f.size)} · ${f.type.toUpperCase()} · 加载于 ${f.loadedAt || '未知'}
+                ${f.validity ? ` · 文号：${escapeHtml(f.validity.docNumber || '')} · 发布日期：${escapeHtml(f.validity.publishDate || '')}` : ''}
+              </div>
+            </div>
+            <div class="kb-actions">
+              <button class="btn btn-xs btn-outline" onclick="previewLocalFile('${f.id}')">预览</button>
+              <button class="btn btn-xs btn-outline" onclick="recheckFileValidity('${f.id}')">重新检查</button>
+              <button class="btn btn-xs btn-danger" onclick="removeLocalFile('${f.id}')">移除</button>
+            </div>
+          </div>`).join('')}
+      </div>
+    `).join('');
+
+  const labels = [...new Set(files.map(f => f.folderLabel || '未分类'))];
+  const statsHtml = labels.map(l => {
+    const count = files.filter(f => (f.folderLabel || '未分类') === l).length;
+    return `<span class="kb-stat"><strong>${count}</strong> ${escapeHtml(l)}</span>`;
+  }).join('');
+
+  let validityTableHtml = '';
+  const checkedFiles = files.filter(f => f.validity);
+  if (checkedFiles.length > 0) {
+    const invalidCount = checkedFiles.filter(f => f.validity.status && (f.validity.status.includes('废止') || f.validity.status.includes('替代') || f.validity.status.includes('疑似'))).length;
+    const validCount = checkedFiles.filter(f => f.validity.status && f.validity.status.includes('有效')).length;
+    const unknownCount = checkedFiles.length - invalidCount - validCount;
+    
+    validityTableHtml = `
+      <div class="card" style="margin-bottom:12px;">
+        <h2>政策有效性检查结果 <span class="badge badge-new">自动检查</span></h2>
+        <div class="kb-stats" style="margin-bottom:8px;">
+          <span class="kb-stat" style="color:#27ae60;">现行有效 <strong>${validCount}</strong></span>
+          ${invalidCount > 0 ? `<span class="kb-stat" style="color:#e74c3c;">有风险 <strong>${invalidCount}</strong></span>` : ''}
+          ${unknownCount > 0 ? `<span class="kb-stat" style="color:#888;">无法判断 <strong>${unknownCount}</strong></span>` : ''}
+        </div>
+        <div style="overflow-x:auto;">
+          <table style="width:100%;border-collapse:collapse;font-size:12px;">
+            <thead>
+              <tr style="background:#f5f5f5;text-align:left;">
+                <th style="padding:6px 8px;border-bottom:1px solid #ddd;">文件名称</th>
+                <th style="padding:6px 8px;border-bottom:1px solid #ddd;">文号</th>
+                <th style="padding:6px 8px;border-bottom:1px solid #ddd;">发布日期</th>
+                <th style="padding:6px 8px;border-bottom:1px solid #ddd;">有效性状态</th>
+                <th style="padding:6px 8px;border-bottom:1px solid #ddd;">判断依据</th>
+              </tr>
+            </thead>
+            <tbody>
+              ${checkedFiles.map(f => {
+                const v = f.validity;
+                let statusColor = '#888';
+                if (v.status.includes('有效')) statusColor = '#27ae60';
+                else if (v.status.includes('废止') || v.status.includes('替代')) statusColor = '#e74c3c';
+                else if (v.status.includes('疑似')) statusColor = '#f39c12';
+                return `<tr>
+                  <td style="padding:4px 8px;border-bottom:1px solid #eee;">${escapeHtml(f.name)}</td>
+                  <td style="padding:4px 8px;border-bottom:1px solid #eee;">${escapeHtml(v.docNumber || '')}</td>
+                  <td style="padding:4px 8px;border-bottom:1px solid #eee;">${escapeHtml(v.publishDate || '')}</td>
+                  <td style="padding:4px 8px;border-bottom:1px solid #eee;color:${statusColor};font-weight:600;">${escapeHtml(v.status)}</td>
+                  <td style="padding:4px 8px;border-bottom:1px solid #eee;font-size:11px;color:#666;">${escapeHtml(v.basis || '')}</td>
+                </tr>`;
+              }).join('')}
+            </tbody>
+          </table>
+        </div>
+        <div style="margin-top:8px;font-size:11px;color:#888;">检查时间：${checkedFiles[0].validity ? checkedFiles[0].validity.checkedAt : ''} · 上传文件后自动检查，无需手动操作</div>
+      </div>`;
+  }
+
+  container.innerHTML = `
+    ${validityTableHtml}
+    <div class="card">
+      <h2>参考资料库</h2>
+      <p style="color:#888;font-size:13px;margin-bottom:12px;">统一管理所有参考文件和政策法规。支持直接加载本地文档（Word/PDF/TXT），也可手动添加文本条目。内容自动注入研判分析，上传后自动检查政策有效性。</p>
+      <div class="kb-stats">
+        <span class="kb-stat"><strong>${files.length}</strong> 个条目</span>
+        <span class="kb-stat"><strong>${formatSize(totalSize)}</strong> 总计</span>
+        ${statsHtml}
+      </div>
+      <div class="btn-group" style="margin-bottom:10px;">
+        <button class="btn btn-primary btn-sm" onclick="showManualAddModal()">+ 手动添加文本</button>
+        <button class="btn btn-outline btn-sm" onclick="pickFolder()">选择文件夹</button>
+        ${files.length > 0 ? '<button class="btn btn-outline btn-sm" onclick="exportKb()">导出</button>' : ''}
+        ${files.length > 0 ? '<button class="btn btn-outline btn-sm" onclick="importKbFile()">导入</button>' : ''}
+      </div>
+      <div class="file-drop-zone" id="localFileDropZone" onclick="document.getElementById('localFileInput').click()">
+        <p>点击选择文件，或拖拽文件到此处</p>
+        <p style="font-size:11px;color:#999;">支持格式：.docx / .pdf / .txt / .html</p>
+        <input type="file" id="localFileInput" multiple accept=".docx,.pdf,.txt,.html,.htm" onchange="handleLocalFiles(this.files)" style="display:none;">
+      </div>
+      <div id="folderFileList" style="margin-top:8px;font-size:12px;"></div>
+      <div id="localFileProgress" style="font-size:12px;margin-top:8px;"></div>
+      <div class="kb-list" style="margin-top:12px;">${listHtml}</div>
+      ${files.length > 0 ? `<div class="btn-group" style="margin-top:12px;"><button class="btn btn-danger btn-sm" onclick="clearAllLocalFiles()">清空全部本地文件</button></div>` : ''}
+    </div>
+    <div class="card">
+      <h2>文件内容预览</h2>
+      <div class="result-box" style="max-height:400px;font-size:12px;" id="localFilePreview">点击文件列表中的"预览"查看内容</div>
+    </div>
+  `;
+
+  // Drag & drop
+  setTimeout(() => {
+    const dropZone = document.getElementById('localFileDropZone');
+    if (dropZone) {
+      dropZone.addEventListener('dragover', e => { e.preventDefault(); dropZone.classList.add('dragover'); });
+      dropZone.addEventListener('dragleave', () => dropZone.classList.remove('dragover'));
+      dropZone.addEventListener('drop', e => { e.preventDefault(); dropZone.classList.remove('dragover'); handleLocalFiles(e.dataTransfer.files); });
+    }
+  }, 0);
+}
+
+function fileIcon(type) {
+  const icons = { docx: '📄', pdf: '📕', txt: '📝', html: '🌐', htm: '🌐' };
+  return icons[type] || '📎';
+}
+
+function formatSize(bytes) {
+  if (!bytes || bytes === 0) return '0 B';
+  if (bytes < 1024) return bytes + ' B';
+  if (bytes < 1024 * 1024) return (bytes / 1024).toFixed(1) + ' KB';
+  return (bytes / (1024 * 1024)).toFixed(1) + ' MB';
+}
+
+async function handleLocalFiles(fileList, folderLabel) {
+  if (!fileList || fileList.length === 0) return;
+  const progressEl = document.getElementById('localFileProgress');
+  const label = folderLabel || '未分类';
+  
+  for (const file of Array.from(fileList)) {
+    const ext = file.name.split('.').pop().toLowerCase();
+    if (!['docx', 'pdf', 'txt', 'html', 'htm'].includes(ext)) {
+      toast(`不支持的文件格式：${file.name}`, 'error');
+      continue;
+    }
+    
+    if (progressEl) progressEl.textContent = `正在解析：${file.name}...`;
+    
+    try {
+      let content = '';
+      if (ext === 'docx') {
+        content = await parseDocx(file);
+      } else if (ext === 'pdf') {
+        content = await parsePdf(file);
+      } else {
+        // txt, html
+        content = await readTextFile(file);
+      }
+      
+      if (!content || content.trim().length === 0) {
+        toast(`${file.name} 解析后内容为空`, 'error');
+        continue;
+      }
+      
+      // Check for duplicates
+      const existingIdx = state.localFiles.findIndex(f => f.name === file.name);
+      if (existingIdx >= 0) {
+        state.localFiles[existingIdx] = {
+          id: state.localFiles[existingIdx].id,
+          name: file.name,
+          type: ext,
+          size: file.size,
+          content: content,
+          folderLabel: label,
+          loadedAt: new Date().toLocaleString('zh-CN'),
+        };
+      } else {
+        state.localFiles.push({
+          id: Date.now().toString(36) + Math.random().toString(36).slice(2, 6),
+          name: file.name,
+          type: ext,
+          size: file.size,
+          content: content,
+          folderLabel: label,
+          loadedAt: new Date().toLocaleString('zh-CN'),
+        });
+      }
+      
+      saveState();
+      if (progressEl) progressEl.textContent = `已加载：${file.name}（${formatSize(file.size)}，${content.length} 字）→ ${label}`;
+    } catch (err) {
+      toast(`解析失败：${file.name} - ${err.message}`, 'error');
+      if (progressEl) progressEl.textContent = '';
+    }
+  }
+  
+  renderLocalFiles(document.getElementById('mainContent'));
+  updateSidebar();
+  toast(`已加载 ${Array.from(fileList).length} 个文件到"${label}"`, 'success');
+  
+  // 自动检查政策有效性
+  if (state.apiKey && state.localFiles.length > 0) {
+    await autoCheckLocalFilesValidity();
+  }
+}
+
+function readTextFile(file) {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = e => resolve(e.target.result);
+    reader.onerror = () => reject(new Error('文件读取失败'));
+    reader.readAsText(file, 'UTF-8');
+  });
+}
+
+function parseDocx(file) {
+  return new Promise((resolve, reject) => {
+    if (typeof mammoth === 'undefined') {
+      reject(new Error('mammoth.js 未加载，请检查网络连接'));
+      return;
+    }
+    const reader = new FileReader();
+    reader.onload = function(e) {
+      mammoth.extractRawText({ arrayBuffer: e.target.result })
+        .then(result => resolve(result.value))
+        .catch(err => reject(new Error('Word解析失败：' + err.message)));
+    };
+    reader.onerror = () => reject(new Error('文件读取失败'));
+    reader.readAsArrayBuffer(file);
+  });
+}
+
+function parsePdf(file) {
+  return new Promise((resolve, reject) => {
+    if (typeof pdfjsLib === 'undefined') {
+      reject(new Error('pdf.js 未加载，请检查网络连接'));
+      return;
+    }
+    pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
+    const reader = new FileReader();
+    reader.onload = async function(e) {
+      try {
+        const pdf = await pdfjsLib.getDocument({ data: e.target.result }).promise;
+        let fullText = '';
+        for (let i = 1; i <= pdf.numPages; i++) {
+          const page = await pdf.getPage(i);
+          const textContent = await page.getTextContent();
+          const pageText = textContent.items.map(item => item.str).join(' ');
+          fullText += pageText + '\n';
+        }
+        resolve(fullText.trim());
+      } catch (err) {
+        reject(new Error('PDF解析失败：' + err.message));
+      }
+    };
+    reader.onerror = () => reject(new Error('文件读取失败'));
+    reader.readAsArrayBuffer(file);
+  });
+}
+
+function previewLocalFile(id) {
+  const file = state.localFiles.find(f => f.id === id);
+  const previewEl = document.getElementById('localFilePreview');
+  if (file && previewEl) {
+    previewEl.textContent = file.content;
+    previewEl.scrollTop = 0;
+  }
+}
+
+function removeLocalFile(id) {
+  state.localFiles = state.localFiles.filter(f => f.id !== id);
+  saveState();
+  renderLocalFiles(document.getElementById('mainContent'));
+  updateSidebar();
+  toast('已移除文件', 'info');
+}
+
+function clearAllLocalFiles() {
+  if (!confirm('确定要清空全部参考资料吗？此操作不可恢复。')) return;
+  state.localFiles = [];
+  saveState();
+  renderLocalFiles(document.getElementById('mainContent'));
+  updateSidebar();
+  toast('已清空全部参考资料', 'info');
+}
+
+// 手动添加文本条目
+function showManualAddModal() {
+  const modal = document.getElementById('modalContainer');
+  modal.innerHTML = `
+    <div class="modal-overlay">
+      <div class="modal" style="max-width:500px;">
+        <button class="close" onclick="closeModal()">&times;</button>
+        <h3>手动添加参考资料</h3>
+        <div class="form-group"><label>条目名称</label><input type="text" id="manualName" placeholder="例如：环评分类管理名录2021年版"></div>
+        <div class="form-group"><label>分类标签</label><input type="text" id="manualLabel" placeholder="例如：政策法规、技术导则、审批原则" value="政策法规"></div>
+        <div class="form-group"><label>内容</label><textarea id="manualContent" style="min-height:150px;" placeholder="粘贴政策文件内容..."></textarea></div>
+        <div class="btn-group">
+          <button class="btn btn-primary" onclick="saveManualEntry()">保存</button>
+          <button class="btn btn-outline" onclick="closeModal()">取消</button>
+        </div>
+      </div>
+    </div>`;
+}
+
+function saveManualEntry() {
+  const name = document.getElementById('manualName')?.value.trim();
+  const label = document.getElementById('manualLabel')?.value.trim() || '未分类';
+  const content = document.getElementById('manualContent')?.value.trim();
+  if (!name) { toast('请输入条目名称', 'error'); return; }
+  if (!content) { toast('请输入内容', 'error'); return; }
+
+  state.localFiles.push({
+    id: Date.now().toString(36) + Math.random().toString(36).slice(2, 6),
+    name: name,
+    type: 'txt',
+    size: new Blob([content]).size,
+    content: content,
+    folderLabel: label,
+    loadedAt: new Date().toLocaleString('zh-CN'),
+    validity: null, // 也会自动检查
+  });
+  saveState();
+  closeModal();
+  renderLocalFiles(document.getElementById('mainContent'));
+  updateSidebar();
+  toast(`已添加"${name}"到参考资料库`, 'success');
+  
+  // 自动检查有效性
+  if (state.apiKey) { autoCheckLocalFilesValidity(); }
+}
+
+// 迁移旧知识库条目到参考资料库（一次性）
+function migrateOldKbEntries() {
+  if (!state.kbEntries || state.kbEntries.length === 0) return;
+  const existingNames = new Set(state.localFiles.map(f => f.name));
+  let migrated = 0;
+  state.kbEntries.forEach(entry => {
+    if (!existingNames.has(entry.name)) {
+      state.localFiles.push({
+        id: entry.id || Date.now().toString(36) + Math.random().toString(36).slice(2, 6),
+        name: entry.name,
+        type: 'txt',
+        size: new Blob([entry.content || '']).size,
+        content: entry.content || '',
+        folderLabel: entry.category || '知识库迁移',
+        loadedAt: entry.createdAt || new Date().toLocaleString('zh-CN'),
+        validity: null,
+      });
+      migrated++;
+    }
+  });
+  if (migrated > 0) {
+    state.kbEntries = [];
+    saveState();
+    toast(`已将 ${migrated} 条旧知识库条目迁移到参考资料库`, 'info');
+  }
+}
+
+// 自动检查所有本地文件的政策有效性
+async function autoCheckLocalFilesValidity() {
+  const files = state.localFiles.filter(f => !f.validity); // 只检查未检查过的
+  if (files.length === 0) return;
+  
+  const listEl = document.getElementById('localFileProgress');
+  let checked = 0;
+  
+  for (const file of files) {
+    if (listEl) listEl.textContent = `正在检查政策有效性 (${checked + 1}/${files.length})：${file.name}...`;
+    
+    try {
+      const result = await checkSingleFileValidity(file);
+      // 找到并更新
+      const idx = state.localFiles.findIndex(f => f.id === file.id);
+      if (idx >= 0) {
+        state.localFiles[idx].validity = result;
+      }
+      checked++;
+      saveState();
+    } catch (err) {
+      const idx = state.localFiles.findIndex(f => f.id === file.id);
+      if (idx >= 0) {
+        state.localFiles[idx].validity = { status: '检查失败', error: err.message, checkedAt: new Date().toLocaleString('zh-CN') };
+      }
+      checked++;
+      saveState();
+    }
+    
+    // 避免API限流
+    if (checked < files.length) await new Promise(r => setTimeout(r, 500));
+  }
+  
+  if (listEl) listEl.textContent = checked > 0 ? `有效性检查完成：${checked} 个文件` : '';
+  renderLocalFiles(document.getElementById('mainContent'));
+}
+
+async function checkSingleFileValidity(file) {
+  const prompt = `请检查以下政策文件/技术规范是否仍然现行有效，提取关键信息。
+
+文件名称：${file.name}
+文件内容（前2000字）：${file.content.substring(0, 2000)}
+
+请严格按以下格式回复（每行一项，不要添加额外说明）：
+文件名称：{文件全称}
+文号：{从内容中提取，如无则填"未提及"}
+发布日期：{从内容中提取，如无则填"未提及"}
+有效性状态：{现行有效/疑似废止/已废止/已被替代/部分条款失效/无法判断}
+判断依据：{一句话说明判断理由，如"该文件为现行有效的国家标准，未有废止公告"或"无法确认有效性，建议人工核实"}
+
+注意：仅基于你已知的信息和文件内容判断，如无法确认请标注"无法判断"，不要编造信息。`;
+
+  const response = await callDeepSeek(SYSTEM_PROMPT, prompt);
+  
+  // 解析回复
+  const nameMatch = response.match(/文件名称[：:]\s*(.+)/);
+  const docMatch = response.match(/文号[：:]\s*(.+)/);
+  const dateMatch = response.match(/发布日期[：:]\s*(.+)/);
+  const statusMatch = response.match(/有效性状态[：:]\s*(.+)/);
+  const basisMatch = response.match(/判断依据[：:]\s*(.+)/);
+  
+  return {
+    fileName: nameMatch ? nameMatch[1].trim() : file.name,
+    docNumber: docMatch ? docMatch[1].trim() : '未提及',
+    publishDate: dateMatch ? dateMatch[1].trim() : '未提及',
+    status: statusMatch ? statusMatch[1].trim() : '无法判断',
+    basis: basisMatch ? basisMatch[1].trim() : '未提供判断依据',
+    checkedAt: new Date().toLocaleString('zh-CN'),
+    raw: response,
+  };
+}
+
+function validityBadge(status) {
+  if (!status) return '<span style="font-size:10px;color:#999;background:#f0f0f0;padding:1px 6px;border-radius:8px;">未检查</span>';
+  if (status === '检查中') return '<span style="font-size:10px;color:#1976d2;background:#e3f2fd;padding:1px 6px;border-radius:8px;">检查中</span>';
+  if (status === '检查失败') return '<span style="font-size:10px;color:#e74c3c;background:#fce4ec;padding:1px 6px;border-radius:8px;">检查失败</span>';
+  if (status.includes('有效')) return `<span style="font-size:10px;color:#27ae60;background:#e8f5e9;padding:1px 6px;border-radius:8px;" title="现行有效">${status}</span>`;
+  if (status.includes('废止') || status.includes('替代')) return `<span style="font-size:10px;color:#e74c3c;background:#fce4ec;padding:1px 6px;border-radius:8px;" title="${status}">${status}</span>`;
+  if (status.includes('疑似')) return `<span style="font-size:10px;color:#f39c12;background:#fff8e1;padding:1px 6px;border-radius:8px;" title="${status}">${status}</span>`;
+  if (status.includes('无法判断')) return `<span style="font-size:10px;color:#888;background:#f5f5f5;padding:1px 6px;border-radius:8px;">${status}</span>`;
+  return `<span style="font-size:10px;color:#888;background:#f5f5f5;padding:1px 6px;border-radius:8px;">${status}</span>`;
+}
+
+function removeLocalFileGroup(label) {
+  if (!confirm(`确定要移除"${label}"分类下的全部文件吗？`)) return;
+  state.localFiles = state.localFiles.filter(f => (f.folderLabel || '未分类') !== label);
+  saveState();
+  renderLocalFiles(document.getElementById('mainContent'));
+  updateSidebar();
+  toast(`已移除"${label}"分类`, 'info');
+}
+
+async function recheckFileValidity(id) {
+  const file = state.localFiles.find(f => f.id === id);
+  if (!file) return;
+  if (!state.apiKey) { toast('请先配置API Key', 'error'); return; }
+  
+  const listEl = document.getElementById('localFileProgress');
+  if (listEl) listEl.textContent = `正在重新检查：${file.name}...`;
+  
+  try {
+    const result = await checkSingleFileValidity(file);
+    const idx = state.localFiles.findIndex(f => f.id === id);
+    if (idx >= 0) {
+      state.localFiles[idx].validity = result;
+    }
+    saveState();
+    if (listEl) listEl.textContent = `已重新检查：${file.name} → ${result.status}`;
+    renderLocalFiles(document.getElementById('mainContent'));
+    toast(`重新检查完成：${result.status}`, result.status.includes('有效') ? 'success' : 'info');
+  } catch (err) {
+    toast(`检查失败：${err.message}`, 'error');
+    if (listEl) listEl.textContent = '';
+  }
+}
+
+// 临时存储文件夹中的文件列表
+let folderFilesCache = [];
+
+async function pickFolder() {
+  // 检查浏览器是否支持 File System Access API
+  if (typeof window.showDirectoryPicker !== 'function') {
+    toast('当前浏览器不支持"选择文件夹"功能，请使用 Chrome/Edge 浏览器，或使用拖拽上传', 'error');
+    return;
+  }
+  
+  try {
+    const dirHandle = await window.showDirectoryPicker();
+    const folderName = dirHandle.name || '未命名文件夹';
+    folderFilesCache = [];
+    const listEl = document.getElementById('folderFileList');
+    if (listEl) listEl.innerHTML = '<div style="color:#888;padding:8px;">正在扫描文件夹...</div>';
+    
+    // 递归扫描文件夹中的文件
+    await scanDirectory(dirHandle, '');
+    
+    if (folderFilesCache.length === 0) {
+      if (listEl) listEl.innerHTML = '<div style="color:#888;padding:8px;">该文件夹中没有支持的文档文件（.docx/.pdf/.txt/.html）</div>';
+      return;
+    }
+    
+    // 显示文件列表，带分类标签输入
+    const existingNames = new Set(state.localFiles.map(f => f.name));
+    const html = `
+      <div style="border:1px solid #ddd;border-radius:6px;padding:8px;max-height:360px;overflow-y:auto;">
+        <div style="display:flex;align-items:center;gap:8px;margin-bottom:8px;padding-bottom:8px;border-bottom:1px solid #eee;flex-wrap:wrap;">
+          <label style="cursor:pointer;font-size:12px;color:var(--primary-light);">
+            <input type="checkbox" onchange="toggleAllFolderFiles(this.checked)"> 全选
+          </label>
+          <span style="font-size:11px;color:#888;">找到 ${folderFilesCache.length} 个文件</span>
+          <span style="font-size:11px;color:#888;">分类标签：</span>
+          <input type="text" id="folderLabelInput" value="${escapeHtml(folderName)}" style="width:140px;padding:3px 8px;font-size:12px;border:1px solid #ccc;border-radius:4px;" placeholder="输入分类名">
+          <button class="btn btn-xs btn-primary" onclick="loadSelectedFolderFiles()" style="margin-left:auto;">加载选中文件</button>
+        </div>
+        ${folderFilesCache.map((f, i) => `
+          <div style="display:flex;align-items:center;gap:6px;padding:3px 0;font-size:12px;${existingNames.has(f.name) ? 'color:#999;' : ''}">
+            <input type="checkbox" class="folder-file-check" data-index="${i}" ${existingNames.has(f.name) ? 'disabled' : ''}>
+            <span>${fileIcon(f.type)} ${escapeHtml(f.name)}</span>
+            <span style="color:#999;font-size:10px;">${formatSize(f.size)}</span>
+            ${existingNames.has(f.name) ? '<span style="color:#27ae60;font-size:10px;">(已加载)</span>' : ''}
+          </div>
+        `).join('')}
+      </div>`;
+    if (listEl) listEl.innerHTML = html;
+  } catch (err) {
+    if (err.name !== 'AbortError') {
+      toast(`文件夹选择失败：${err.message}`, 'error');
+    }
+  }
+}
+
+async function scanDirectory(dirHandle, path) {
+  for await (const entry of dirHandle.values()) {
+    if (entry.kind === 'file') {
+      const ext = entry.name.split('.').pop().toLowerCase();
+      if (['docx', 'pdf', 'txt', 'html', 'htm'].includes(ext)) {
+        const file = await entry.getFile();
+        folderFilesCache.push({
+          name: entry.name,
+          type: ext,
+          size: file.size,
+          handle: entry,
+          file: file,
+        });
+      }
+    } else if (entry.kind === 'directory') {
+      // 递归扫描子文件夹（最多一层）
+      await scanDirectory(entry, path + entry.name + '/');
+    }
+  }
+}
+
+function toggleAllFolderFiles(checked) {
+  document.querySelectorAll('.folder-file-check').forEach(cb => {
+    if (!cb.disabled) cb.checked = checked;
+  });
+}
+
+async function loadSelectedFolderFiles() {
+  const checked = document.querySelectorAll('.folder-file-check:checked');
+  if (checked.length === 0) {
+    toast('请至少选择一个文件', 'info');
+    return;
+  }
+  
+  const labelInput = document.getElementById('folderLabelInput');
+  const folderLabel = labelInput ? labelInput.value.trim() || '未分类' : '未分类';
+  
+  const filesToLoad = [];
+  checked.forEach(cb => {
+    const idx = parseInt(cb.dataset.index);
+    if (folderFilesCache[idx]) {
+      filesToLoad.push(folderFilesCache[idx].file);
+    }
+  });
+  
+  if (filesToLoad.length > 0) {
+    const listEl = document.getElementById('localFileProgress');
+    if (listEl) listEl.textContent = `正在加载 ${filesToLoad.length} 个文件到"${folderLabel}"...`;
+    await handleLocalFiles(filesToLoad, folderLabel);
+    folderFilesCache = [];
+    const folderListEl = document.getElementById('folderFileList');
+    if (folderListEl) folderListEl.innerHTML = '';
+  }
+}
+function renderKbManager(container) {
+  const searchTerm = (container.dataset.kbSearch || '').toLowerCase();
+  const filterCat = container.dataset.kbFilter || '';
+  let entries = state.kbEntries;
+  if (searchTerm) entries = entries.filter(e => e.name.toLowerCase().includes(searchTerm) || e.content.toLowerCase().includes(searchTerm));
+  if (filterCat) entries = entries.filter(e => e.category === filterCat);
+
+  const statsHtml = KB_CATEGORIES.map(cat => {
+    const count = state.kbEntries.filter(e => e.category === cat).length;
+    return `<span class="kb-stat"><strong>${count}</strong> ${cat}</span>`;
+  }).join('');
+
+  const listHtml = entries.length === 0 ? `<div class="kb-empty">${state.kbEntries.length === 0 ? '知识库为空，点击下方按钮添加第一条知识' : '没有匹配的知识条目'}</div>` :
+    entries.map(e => {
+      const sel = state.selectedKbIds.includes(e.id);
+      return `<div class="kb-item${sel ? ' selected' : ''}" onclick="toggleKbSelect('${e.id}')">
+        <div class="kb-check">${sel ? '✓' : ''}</div>
+        <div class="kb-info">
+          <div class="kb-name"><span class="kb-tag kb-tag-${e.category}">${e.category}</span>${escapeHtml(e.name)}</div>
+          <div class="kb-meta">${e.content.length} 字 · ${e.createdAt}</div>
+        </div>
+        <div class="kb-actions" onclick="event.stopPropagation()">
+          <button class="btn btn-xs btn-outline" onclick="editKbEntry('${e.id}')">编辑</button>
+          <button class="btn btn-xs btn-danger" onclick="deleteKbEntry('${e.id}')">删除</button>
+        </div>
+      </div>`;
+    }).join('');
+
+  const selectedCount = state.selectedKbIds.length;
+
+  container.innerHTML = `
+    <div class="card">
+      <h2>知识库管理 <span class="badge badge-core">${state.kbEntries.length} 条</span></h2>
+      <p style="color:#888;font-size:13px;margin-bottom:12px;">收集存放固定的政策法规、技术导则、审批原则等文件。研判时勾选需要的条目，AI会自动引用。</p>
+      <div class="kb-stats">${statsHtml}</div>
+      ${selectedCount > 0 ? `<div class="kb-select-bar">当前已勾选 <span class="count">${selectedCount}</span> 条知识，研判时将自动作为AI的参考依据。 <button class="btn btn-xs btn-outline" onclick="clearKbSelection()">取消全选</button></div>` : ''}
+      <input type="text" class="kb-search" id="kbSearch" placeholder="搜索知识条目..." value="${escapeHtml(searchTerm)}" oninput="document.getElementById('mainContent').dataset.kbSearch=this.value;renderKbManager(document.getElementById('mainContent'))">
+      <div style="margin-bottom:10px;display:flex;gap:6px;flex-wrap:wrap;">
+        <button class="btn btn-xs ${filterCat === '' ? 'btn-primary' : 'btn-outline'}" onclick="document.getElementById('mainContent').dataset.kbFilter='';renderKbManager(document.getElementById('mainContent'))">全部</button>
+        ${KB_CATEGORIES.map(cat => `<button class="btn btn-xs ${filterCat === cat ? 'btn-primary' : 'btn-outline'}" onclick="document.getElementById('mainContent').dataset.kbFilter='${cat}';renderKbManager(document.getElementById('mainContent'))">${cat}</button>`).join('')}
+      </div>
+      <div class="kb-list">${listHtml}</div>
+      <div class="btn-group">
+        <button class="btn btn-primary" onclick="showKbModal()">+ 添加知识</button>
+        <button class="btn btn-outline" onclick="showBatchImport()">批量导入（TXT文件）</button>
+        ${state.kbEntries.length > 0 ? '<button class="btn btn-outline btn-sm" onclick="exportKb()">导出知识库</button>' : ''}
+        ${state.kbEntries.length > 0 ? '<button class="btn btn-outline btn-sm" onclick="importKbFile()">导入知识库</button>' : ''}
+        ${state.kbEntries.length > 0 ? '<button class="btn btn-warning btn-sm" onclick="checkKbValidity()" style="background:#f39c12;color:#fff;border:none;">有效性检查</button>' : ''}
+      </div>
+    </div>
+    <div class="card">
+      <h2>当前选中知识预览</h2>
+      <div class="result-box" style="max-height:300px;font-size:12px;color:#666;">${selectedCount > 0 ? escapeHtml(getSelectedKbContent()) : '尚未勾选任何知识条目。点击上方条目左侧勾选框选择。'}</div>
+    </div>
+  `;
+}
+
+function toggleKbSelect(id) {
+  const idx = state.selectedKbIds.indexOf(id);
+  if (idx >= 0) state.selectedKbIds.splice(idx, 1);
+  else state.selectedKbIds.push(id);
+  saveState();
+  renderKbManager(document.getElementById('mainContent'));
+}
+
+function clearKbSelection() { state.selectedKbIds = []; saveState(); renderKbManager(document.getElementById('mainContent')); }
+
+function showKbModal(editId) {
+  const entry = editId ? state.kbEntries.find(e => e.id === editId) : null;
+  const modal = document.getElementById('modalContainer');
+  modal.innerHTML = `
+    <div class="modal-overlay" onclick="if(event.target===this)closeModal()">
+      <div class="modal">
+        <button class="close" onclick="closeModal()">&times;</button>
+        <h3>${entry ? '编辑知识条目' : '添加知识条目'}</h3>
+        <div class="form-group">
+          <label>名称</label>
+          <input type="text" id="kbName" placeholder="例如：《建设项目环境影响评价分类管理名录》（2021年版）" value="${escapeHtml(entry ? entry.name : '')}">
+        </div>
+        <div class="form-group">
+          <label>分类</label>
+          <select id="kbCategory">${KB_CATEGORIES.map(c => `<option value="${c}" ${entry && entry.category === c ? 'selected' : ''}>${c}</option>`).join('')}</select>
+        </div>
+        <div class="form-group">
+          <label>内容</label>
+          <textarea id="kbContent" style="min-height:200px;" placeholder="粘贴政策法规、技术导则等文件的完整或关键内容...">${escapeHtml(entry ? entry.content : '')}</textarea>
+        </div>
+        <div class="btn-group">
+          <button class="btn btn-primary" onclick="saveKbEntry('${editId || ''}')">保存</button>
+          <button class="btn btn-outline" onclick="closeModal()">取消</button>
+        </div>
+      </div>
+    </div>`;
+}
+
+function closeModal() { document.getElementById('modalContainer').innerHTML = ''; }
+
+function saveKbEntry(editId) {
+  const name = document.getElementById('kbName').value.trim();
+  const category = document.getElementById('kbCategory').value;
+  const content = document.getElementById('kbContent').value.trim();
+  if (!name) { toast('请输入知识条目名称', 'error'); return; }
+  if (!content) { toast('请输入知识条目内容', 'error'); return; }
+  if (editId) {
+    const idx = state.kbEntries.findIndex(e => e.id === editId);
+    if (idx >= 0) { state.kbEntries[idx].name = name; state.kbEntries[idx].category = category; state.kbEntries[idx].content = content; }
+  } else {
+    state.kbEntries.push({ id: Date.now().toString(36) + Math.random().toString(36).slice(2, 6), name, category, content, createdAt: new Date().toLocaleDateString('zh-CN') });
+  }
+  saveState();
+  closeModal();
+  renderKbManager(document.getElementById('mainContent'));
+  toast('知识条目已保存', 'success');
+}
+
+function editKbEntry(id) { showKbModal(id); }
+
+function deleteKbEntry(id) {
+  if (!confirm('确定要删除这条知识吗？此操作不可恢复。')) return;
+  state.kbEntries = state.kbEntries.filter(e => e.id !== id);
+  state.selectedKbIds = state.selectedKbIds.filter(i => i !== id);
+  saveState();
+  renderKbManager(document.getElementById('mainContent'));
+  toast('已删除', 'info');
+}
+
+function showBatchImport() {
+  const modal = document.getElementById('modalContainer');
+  modal.innerHTML = `
+    <div class="modal-overlay" onclick="if(event.target===this)closeModal()">
+      <div class="modal">
+        <button class="close" onclick="closeModal()">&times;</button>
+        <h3>批量导入TXT文件</h3>
+        <p style="color:#888;font-size:13px;margin-bottom:12px;">选择多个TXT文件，每个文件将作为一条知识条目导入。文件名作为条目名称，文件内容作为条目内容。</p>
+        <div class="form-group">
+          <label>分类</label>
+          <select id="batchCategory">${KB_CATEGORIES.map(c => `<option value="${c}">${c}</option>`).join('')}</select>
+        </div>
+        <div class="file-drop-zone" id="dropZone" onclick="document.getElementById('batchFileInput').click()">
+          <p>点击选择TXT文件，或拖拽文件到此处</p>
+          <input type="file" id="batchFileInput" multiple accept=".txt" onchange="handleBatchFiles(this.files)">
+        </div>
+        <div id="batchFileList" style="font-size:12px;max-height:200px;overflow-y:auto;"></div>
+        <div class="btn-group" style="margin-top:12px;">
+          <button class="btn btn-primary" id="btnBatchImport" disabled onclick="doBatchImport()">导入</button>
+          <button class="btn btn-outline" onclick="closeModal()">取消</button>
+        </div>
+      </div>
+    </div>`;
+  
+  // Drag & drop
+  const dropZone = document.getElementById('dropZone');
+  dropZone.addEventListener('dragover', e => { e.preventDefault(); dropZone.classList.add('dragover'); });
+  dropZone.addEventListener('dragleave', () => dropZone.classList.remove('dragover'));
+  dropZone.addEventListener('drop', e => { e.preventDefault(); dropZone.classList.remove('dragover'); handleBatchFiles(e.dataTransfer.files); });
+}
+
+let batchFilesData = [];
+function handleBatchFiles(files) {
+  batchFilesData = [];
+  const list = document.getElementById('batchFileList');
+  const btn = document.getElementById('btnBatchImport');
+  if (!files || files.length === 0) { list.innerHTML = ''; btn.disabled = true; return; }
+  
+  let loaded = 0;
+  Array.from(files).forEach(file => {
+    const reader = new FileReader();
+    reader.onload = function(e) {
+      batchFilesData.push({ name: file.name.replace(/\.txt$/i, ''), content: e.target.result });
+      loaded++;
+      if (loaded === files.length) {
+        list.innerHTML = batchFilesData.map(f => `<div style="padding:4px 0;">${escapeHtml(f.name)} (${f.content.length} 字)</div>`).join('');
+        btn.disabled = false;
+      }
+    };
+    reader.readAsText(file, 'UTF-8');
+  });
+}
+
+function doBatchImport() {
+  const cat = document.getElementById('batchCategory').value;
+  batchFilesData.forEach(f => {
+    state.kbEntries.push({ id: Date.now().toString(36) + Math.random().toString(36).slice(2, 6), name: f.name, category: cat, content: f.content, createdAt: new Date().toLocaleDateString('zh-CN') });
+  });
+  saveState();
+  closeModal();
+  renderKbManager(document.getElementById('mainContent'));
+  toast(`已导入 ${batchFilesData.length} 条知识`, 'success');
+}
+
+function exportKb() {
+  const data = JSON.stringify(state.kbEntries, null, 2);
+  const blob = new Blob([data], { type: 'application/json;charset=utf-8' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a'); a.href = url; a.download = `环评知识库_${new Date().toISOString().slice(0,10)}.json`; a.click();
+  URL.revokeObjectURL(url);
+  toast('知识库已导出', 'success');
+}
+
+function importKbFile() {
+  const input = document.createElement('input'); input.type = 'file'; input.accept = '.json';
+  input.onchange = function(e) {
+    const file = e.target.files[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = function(ev) {
+      try {
+        const data = JSON.parse(ev.target.result);
+        if (!Array.isArray(data)) { toast('文件格式不正确', 'error'); return; }
+        const existingIds = new Set(state.kbEntries.map(e => e.id));
+        let added = 0;
+        data.forEach(item => {
+          if (!existingIds.has(item.id)) { state.kbEntries.push(item); added++; }
+        });
+        saveState();
+        renderKbManager(document.getElementById('mainContent'));
+        toast(`已导入 ${added} 条新知识（跳过 ${data.length - added} 条重复）`, 'success');
+      } catch (err) { toast('文件解析失败', 'error'); }
+    };
+    reader.readAsText(file);
+  };
+  input.click();
+}
+
+// ============ WEB SEARCH PANEL ============
+function renderSearchPanel(container) {
+  const hasSearchConfig = !!state.searchApiUrl;
+  const hasSearchContext = !!state.searchContext;
+  const results = state.searchResults;
+  
+  let resultsHtml = '';
+  if (results && results.length > 0) {
+    resultsHtml = `<div class="kb-list" style="margin-top:12px;">${results.map((r, i) => {
+      const isSelected = state.searchContext && state.searchContext.includes(r.snippet || r.content || '');
+      return `<div class="kb-item${isSelected ? ' selected' : ''}" style="cursor:pointer;" onclick="toggleSearchResult(${i})">
+        <div class="kb-check">${isSelected ? '✓' : ''}</div>
+        <div class="kb-info">
+          <div class="kb-name">${escapeHtml(r.title || '无标题')}</div>
+          <div class="kb-meta">${escapeHtml((r.snippet || r.content || '').substring(0, 200))}...</div>
+          ${r.url ? `<div class="kb-meta" style="color:var(--primary-light);">${escapeHtml(r.url)}</div>` : ''}
+        </div>
+      </div>`;
+    }).join('')}</div>`;
+  }
+
+  container.innerHTML = `
+    <div class="card">
+      <h2>联网检索 <span class="badge badge-new">V4.0新增</span></h2>
+      <p style="color:#888;font-size:13px;margin-bottom:12px;">在研判过程中遇到模棱两可的情况时（如行业类别匹配多个选项、环评类别不确定），可在此搜索官方回复和解读文件。搜索结果可勾选后注入研判分析。</p>
+      ${!hasSearchConfig ? `<div style="background:#fff3cd;padding:10px;border-radius:6px;margin-bottom:12px;font-size:12px;color:#856404;">⚠ 尚未配置搜索API，请先在 <a href="javascript:void(0)" onclick="switchStep(0)" style="color:var(--primary-light);">API配置</a> 中设置搜索API地址。</div>` : ''}
+      <div style="display:flex;align-items:center;gap:12px;margin-bottom:12px;padding:10px 14px;background:#f0f7ff;border:1px solid #bbdefb;border-radius:6px;">
+        <label style="display:flex;align-items:center;gap:8px;cursor:pointer;font-size:13px;font-weight:600;">
+          <input type="checkbox" id="autoSearchToggle" ${state.autoSearch ? 'checked' : ''} onchange="toggleAutoSearch(this.checked)" style="width:18px;height:18px;">
+          自动联网检索
+        </label>
+        <span style="font-size:12px;color:#888;">开启后，点击任一模块的"运行分析"时，工具会自动搜索官方回复和解读，无需手动操作</span>
+      </div>
+      ${hasSearchContext ? `<div class="kb-select-bar">当前已选定检索结果作为研判参考，运行分析时将自动注入AI对话。 <button class="btn btn-xs btn-outline" onclick="clearSearchContext()">清除检索上下文</button></div>` : ''}
+      <div style="display:flex;gap:10px;align-items:flex-end;">
+        <div class="form-group" style="flex:1;margin-bottom:0;">
+          <label>搜索关键词</label>
+          <div class="hint">建议搜索格式："{政策文件名} 官方回复" 或 "{行业} 环评类别 生态环境部 回复"</div>
+          <input type="text" id="searchQuery" placeholder="例如：废塑料再生利用 环评类别 生态环境部 回复" onkeydown="if(event.key==='Enter')doSearch()">
+        </div>
+        <div class="form-group" style="flex:0;margin-bottom:0;">
+          <label>&nbsp;</label>
+          <button class="btn btn-primary" id="btnSearch" onclick="doSearch()" ${!hasSearchConfig ? 'disabled' : ''}>搜索</button>
+        </div>
+      </div>
+      <div style="margin-top:8px;font-size:11px;color:#888;">
+        快捷搜索：
+        <button class="btn btn-xs btn-outline" onclick="quickSearch('行业类别')" ${!hasSearchConfig ? 'disabled' : ''}>行业类别判定</button>
+        <button class="btn btn-xs btn-outline" onclick="quickSearch('环评类别')" ${!hasSearchConfig ? 'disabled' : ''}>环评类别判定</button>
+        <button class="btn btn-xs btn-outline" onclick="quickSearch('审批权限')" ${!hasSearchConfig ? 'disabled' : ''}>审批权限</button>
+        <button class="btn btn-xs btn-outline" onclick="quickSearch('政策有效性')" ${!hasSearchConfig ? 'disabled' : ''}>政策有效性</button>
+      </div>
+      ${resultsHtml}
+      ${results && results.length === 0 ? `<div class="kb-empty" style="margin-top:12px;">未找到相关结果，请尝试更换关键词</div>` : ''}
+      ${results && results.length > 0 ? `<div class="btn-group" style="margin-top:12px;"><button class="btn btn-success" onclick="injectSearchToAnalysis()">将勾选结果注入研判</button></div>` : ''}
+    </div>
+    <div class="card">
+      <h2>检索结果预览</h2>
+      <div class="result-box" style="max-height:300px;font-size:12px;color:#666;">${hasSearchContext ? escapeHtml(state.searchContext) : '尚未选定检索结果。开启"自动联网检索"后，运行分析时工具会自动搜索并注入。'}</div>
+    </div>
+  `;
+}
+
+function toggleAutoSearch(val) {
+  state.autoSearch = val;
+  saveState();
+  toast(val ? '自动联网检索已开启' : '自动联网检索已关闭', 'info');
+}
+
+// 根据模块代码和项目信息智能生成搜索关键词
+function generateAutoSearchQuery(code) {
+  const projectOverview = state.results['HB-PT-001'] || state.projectInfo || '';
+  // 提取项目关键信息（取前200字作为行业关键词来源）
+  const shortInfo = projectOverview.substring(0, 200);
+  
+  const queries = {
+    'HB-PT-002': `${shortInfo} 行业类别 国民经济行业分类 环评类别 生态环境部 回复`,
+    'HB-PT-003': `${shortInfo} 产业结构调整指导目录 产业政策 行业准入 发改委`,
+    'HB-PT-004': `${shortInfo} 规划环评 园区规划 符合性`,
+    'HB-PT-005': `${shortInfo} 三线一单 生态环境分区管控 环境管控单元`,
+    'HB-PT-006': `${shortInfo} 长江保护法 岸线管控 长江经济带`,
+    'HB-PT-007': `${shortInfo} 两高项目 化工项目 环保管理要求`,
+    'HB-PT-008': `${shortInfo} 环评审批原则 行业准入条件`,
+    'HB-PT-009': `${shortInfo} 污染节点 治理措施 同类项目`,
+  };
+  
+  return queries[code] || `${shortInfo} 环评 政策 回复`;
+}
+
+// 核心：自动执行搜索，返回搜索结果文本
+async function autoSearch(code) {
+  if (!state.autoSearch) return null;
+  if (!state.searchApiUrl) return null;
+  
+  const query = generateAutoSearchQuery(code);
+  if (!query) return null;
+  
+  try {
+    let url = state.searchApiUrl;
+    if (url.includes('{query}')) {
+      url = url.replace('{query}', encodeURIComponent(query));
+    } else {
+      url += encodeURIComponent(query);
+    }
+    
+    const headers = { 'Accept': 'application/json' };
+    if (state.searchApiKey) {
+      headers['Authorization'] = `Bearer ${state.searchApiKey}`;
+      headers['X-API-Key'] = state.searchApiKey;
+    }
+
+    const response = await fetch(url, { headers });
+    if (!response.ok) return null;
+    
+    const data = await response.json();
+    const results = parseSearchResults(data);
+    if (results.length === 0) return null;
+    
+    // 取前5条结果，构造上下文
+    const context = results.slice(0, 5).map(r => 
+      `【来源】${r.title}\n【链接】${r.url || '无'}\n【内容】${r.snippet || r.content || ''}`
+    ).join('\n\n---\n\n');
+    
+    return { query, context, count: results.length };
+  } catch (err) {
+    return null;
+  }
+}
+
+function quickSearch(topic) {
+  const input = document.getElementById('searchQuery');
+  if (input) {
+    input.value = topic + ' ' + (state.projectInfo ? state.projectInfo.substring(0, 50) : '');
+    doSearch();
+  }
+}
+
+async function doSearch() {
+  const query = document.getElementById('searchQuery')?.value.trim();
+  if (!query) { toast('请输入搜索关键词', 'error'); return; }
+  if (!state.searchApiUrl) { toast('请先在API配置中设置搜索API', 'error'); return; }
+  
+  const btn = document.getElementById('btnSearch');
+  if (btn) { btn.disabled = true; btn.textContent = '搜索中...'; }
+  
+  try {
+    let url = state.searchApiUrl;
+    // Support both {query} placeholder and direct concatenation
+    if (url.includes('{query}')) {
+      url = url.replace('{query}', encodeURIComponent(query));
+    } else {
+      url += encodeURIComponent(query);
+    }
+    
+    const headers = { 'Accept': 'application/json' };
+    if (state.searchApiKey) {
+      headers['Authorization'] = `Bearer ${state.searchApiKey}`;
+      // Some APIs use x-api-key or api_key parameter
+      headers['X-API-Key'] = state.searchApiKey;
+    }
+
+    const response = await fetch(url, { headers });
+    if (!response.ok) throw new Error(`搜索请求失败 (${response.status})`);
+    
+    const data = await response.json();
+    state.searchResults = parseSearchResults(data);
+    saveState();
+    renderSearchPanel(document.getElementById('mainContent'));
+    
+    if (state.searchResults.length === 0) {
+      toast('未找到结果，请尝试其他关键词', 'info');
+    } else {
+      toast(`找到 ${state.searchResults.length} 条结果`, 'success');
+    }
+  } catch (err) {
+    toast(`搜索失败：${err.message}`, 'error');
+    // Fallback: open browser search
+    if (confirm(`API搜索失败，是否在新标签页中打开浏览器搜索？`)) {
+      window.open(`https://www.google.com/search?q=${encodeURIComponent(query + ' site:mee.gov.cn OR site:gov.cn')}`, '_blank');
+    }
+  } finally {
+    if (btn) { btn.disabled = false; btn.textContent = '搜索'; }
+  }
+}
+
+function parseSearchResults(data) {
+  // Try multiple common response formats
+  let results = [];
+  
+  // SearXNG format
+  if (data.results && Array.isArray(data.results)) {
+    results = data.results.map(r => ({
+      title: r.title || '',
+      url: r.url || '',
+      snippet: r.content || r.snippet || '',
+      content: r.content || r.snippet || '',
+    }));
+  }
+  // SerpAPI / Google format
+  else if (data.organic_results && Array.isArray(data.organic_results)) {
+    results = data.organic_results.map(r => ({
+      title: r.title || '',
+      url: r.link || r.url || '',
+      snippet: r.snippet || '',
+      content: r.snippet || '',
+    }));
+  }
+  // SearchApi format
+  else if (data.organic_results && Array.isArray(data.organic_results)) {
+    results = data.organic_results.map(r => ({
+      title: r.title || '',
+      url: r.link || '',
+      snippet: r.snippet || r.description || '',
+      content: r.snippet || r.description || '',
+    }));
+  }
+  // DuckDuckGo format
+  else if (data.RelatedTopics && Array.isArray(data.RelatedTopics)) {
+    results = data.RelatedTopics.filter(r => r.Text).map(r => ({
+      title: r.Text.substring(0, 80),
+      url: r.FirstURL || '',
+      snippet: r.Text || '',
+      content: r.Text || '',
+    }));
+  }
+  // Generic: try to find any array of results
+  else {
+    for (const key of Object.keys(data)) {
+      if (Array.isArray(data[key]) && data[key].length > 0 && data[key][0].title) {
+        results = data[key].map(r => ({
+          title: r.title || r.name || '',
+          url: r.url || r.link || r.href || '',
+          snippet: r.snippet || r.description || r.content || r.summary || '',
+          content: r.snippet || r.description || r.content || r.summary || '',
+        }));
+        break;
+      }
+    }
+  }
+  
+  return results.slice(0, 20);
+}
+
+function toggleSearchResult(index) {
+  if (!state.searchResults || !state.searchResults[index]) return;
+  const r = state.searchResults[index];
+  const text = `【来源】${r.title}\n【链接】${r.url || '无'}\n【内容】${r.snippet || r.content || ''}`;
+  
+  if (state.searchContext && state.searchContext.includes(r.snippet || r.content || '')) {
+    // Remove this result
+    state.searchContext = state.searchContext.replace(
+      new RegExp(`【来源】${escapeRegex(r.title)}[\\s\\S]*?(?=【来源】|$)`, 'g'), ''
+    ).trim();
+  } else {
+    // Add this result
+    state.searchContext = (state.searchContext ? state.searchContext + '\n\n---\n\n' : '') + text;
+  }
+  saveState();
+  renderSearchPanel(document.getElementById('mainContent'));
+}
+
+function injectSearchToAnalysis() {
+  if (!state.searchContext) { toast('请先勾选搜索结果', 'info'); return; }
+  toast('检索结果已注入研判上下文，切换到研判模块运行分析即可自动引用', 'success');
+}
+
+function clearSearchContext() {
+  state.searchContext = '';
+  state.searchResults = null;
+  saveState();
+  renderSearchPanel(document.getElementById('mainContent'));
+  toast('已清除检索上下文', 'info');
+}
+
+function escapeRegex(str) {
+  return (str || '').replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+}
+
+// ============ KB VALIDITY CHECKER ============
+async function checkKbValidity() {
+  if (!state.apiKey) { toast('请先在"API配置"中设置AI模型API Key', 'error'); switchStep(0); return; }
+  const entries = state.kbEntries;
+  if (entries.length === 0) { toast('知识库为空，无需检查', 'info'); return; }
+  
+  const modal = document.getElementById('modalContainer');
+  modal.innerHTML = `
+    <div class="modal-overlay">
+      <div class="modal" style="max-width:800px;">
+        <button class="close" onclick="closeModal()">&times;</button>
+        <h3>知识库有效性检查</h3>
+        <p style="color:#888;font-size:13px;margin-bottom:12px;">正在逐条检查知识库中的文件是否废止、失效或被替代，请稍候...</p>
+        <div id="validityProgress" style="max-height:400px;overflow-y:auto;font-size:12px;"></div>
+        <div class="btn-group" style="margin-top:12px;">
+          <button class="btn btn-primary" id="btnApplyValidity" onclick="applyValidityResults()" disabled>应用检查结果</button>
+          <button class="btn btn-outline" onclick="closeModal()">关闭</button>
+        </div>
+      </div>
+    </div>`;
+  
+  const progressEl = document.getElementById('validityProgress');
+  const results = {};
+  let total = entries.length;
+  let done = 0;
+  
+  for (let i = 0; i < entries.length; i++) {
+    const entry = entries[i];
+    progressEl.innerHTML += `<div style="padding:4px 0;color:#888;">正在检查 (${i+1}/${total})：${escapeHtml(entry.name)}...</div>`;
+    progressEl.scrollTop = progressEl.scrollHeight;
+    
+    try {
+      const prompt = `请检查以下政策文件/技术规范是否仍然现行有效，分析其废止、失效或被替代的风险。
+
+文件名称：${entry.name}
+文件分类：${entry.category}
+文件内容摘要：${entry.content.substring(0, 2000)}
+
+请按以下格式回复（简洁，每项一行）：
+状态：{现行有效/疑似废止/已废止/已被替代/部分条款失效/无法判断}
+文件名称：{文件全称}
+文号：{从内容中提取，如无则填"未提及"}
+废止/替代文件：{如有，填写替代文件名称；如无则填"无"}
+风险等级：{高/中/低/无}
+建议：{一句话建议}
+
+注意：仅基于你已知的信息判断，如无法确认请标注"无法判断"，不要编造信息。`;
+
+      const response = await callDeepSeek(SYSTEM_PROMPT, prompt);
+      results[entry.id] = {
+        checkedAt: new Date().toLocaleString('zh-CN'),
+        name: entry.name,
+        result: response,
+      };
+      
+      // Extract status for display
+      let statusMatch = response.match(/状态[：:]\s*(.+)/);
+      let status = statusMatch ? statusMatch[1].trim() : '无法判断';
+      let color = status.includes('有效') ? '#27ae60' : status.includes('废止') || status.includes('替代') ? '#e74c3c' : status.includes('疑似') ? '#f39c12' : '#888';
+      
+      progressEl.innerHTML = progressEl.innerHTML.replace(
+        `正在检查 (${i+1}/${total})：${escapeHtml(entry.name)}...</div>`,
+        `</div><div style="padding:4px 0;">${i+1}/${total}：${escapeHtml(entry.name)} — <span style="color:${color};font-weight:600;">${status}</span></div>`
+      );
+    } catch (err) {
+      results[entry.id] = { checkedAt: new Date().toLocaleString('zh-CN'), name: entry.name, result: `检查失败：${err.message}`, error: true };
+      progressEl.innerHTML = progressEl.innerHTML.replace(
+        `正在检查 (${i+1}/${total})：${escapeHtml(entry.name)}...</div>`,
+        `</div><div style="padding:4px 0;color:#e74c3c;">${i+1}/${total}：${escapeHtml(entry.name)} — 检查失败</div>`
+      );
+    }
+    
+    done++;
+    // Avoid rate limiting
+    if (i < entries.length - 1) await new Promise(r => setTimeout(r, 500));
+  }
+  
+  state.kbValidityResults = results;
+  saveState();
+  progressEl.innerHTML += `<div style="padding:8px 0;color:#27ae60;font-weight:600;margin-top:8px;">检查完成！共检查 ${total} 条，结果已暂存。点击"应用检查结果"将更新知识库标记。</div>`;
+  document.getElementById('btnApplyValidity').disabled = false;
+}
+
+function applyValidityResults() {
+  const results = state.kbValidityResults;
+  if (!results || Object.keys(results).length === 0) { toast('没有可应用的检查结果', 'info'); return; }
+  
+  let updated = 0;
+  state.kbEntries = state.kbEntries.map(entry => {
+    const check = results[entry.id];
+    if (!check || check.error) return entry;
+    
+    const response = check.result;
+    let statusMatch = response.match(/状态[：:]\s*(.+)/);
+    let status = statusMatch ? statusMatch[1].trim() : '';
+    
+    if (status && !status.includes('有效') && !status.includes('无法判断')) {
+      // Add validity warning to the entry name
+      if (!entry.name.includes('【')) {
+        entry.name = entry.name + ` 【${status}】`;
+      }
+      updated++;
+    }
+    
+    // Add validity check result to content
+    if (!entry.content.includes('【有效性检查】')) {
+      entry.content += `\n\n【有效性检查 - ${check.checkedAt}】\n${response}`;
+    }
+    
+    return entry;
+  });
+  
+  saveState();
+  closeModal();
+  renderKbManager(document.getElementById('mainContent'));
+  toast(`已更新 ${updated} 条知识条目的有效性标记`, 'success');
+}
+function renderApiConfig(container) {
+  container.innerHTML = `
+    <div class="card">
+      <h2>AI模型 API配置</h2>
+      <div class="api-config">
+        <div class="form-group"><label>API地址</label><input type="text" id="apiBase" value="${escapeHtml(state.apiBase)}" placeholder="https://api.deepseek.com/v1"></div>
+        <div class="form-group"><label>模型</label><input type="text" id="apiModel" value="${escapeHtml(state.model)}" placeholder="deepseek-chat"></div>
+        <div class="form-group"><label>API Key</label><input type="password" id="apiKey" value="${escapeHtml(state.apiKey)}" placeholder="sk-..."></div>
+        <div class="form-group" style="flex:0;"><label>&nbsp;</label><button class="btn btn-primary" onclick="saveApiConfig()">保存配置</button></div>
+      </div>
+      <div style="margin-top:12px;font-size:12px;color:#888;">提示：DeepSeek API Key 可在 <a href="https://platform.deepseek.com" target="_blank">platform.deepseek.com</a> 获取。也支持兼容OpenAI格式的其他API。</div>
+    </div>
+    <div class="card">
+      <h2>联网搜索 API配置 <span class="badge badge-new">V4.0新增</span></h2>
+      <p style="color:#888;font-size:13px;margin-bottom:10px;">配置搜索API后，可在"联网检索"页面搜索官方回复、解读文件等。支持以下免费/低成本方案：</p>
+      <div style="font-size:12px;color:#888;margin-bottom:12px;background:#f8f9fa;padding:10px;border-radius:6px;">
+        <strong>推荐方案：</strong><br>
+        ① <b>SearXNG公共实例</b>（免费，无需注册）：填入 <code>https://searx.be/search?format=json&q=</code> 即可<br>
+        ② <b>SerpAPI</b>（免费100次/月）：注册后填入 <code>https://serpapi.com/search?engine=google&q=</code> 并在下方填写API Key<br>
+        ③ <b>SearchApi</b>（免费100次/月）：注册后填入 <code>https://www.searchapi.io/api/v1/search?engine=google&q=</code> 并在下方填写API Key
+      </div>
+      <div class="api-config">
+        <div class="form-group"><label>搜索API地址（URL模板，查询词用 {query} 或直接拼在末尾）</label><input type="text" id="searchApiUrl" value="${escapeHtml(state.searchApiUrl)}" placeholder="https://searx.be/search?format=json&q="></div>
+        <div class="form-group"><label>API Key（可选，部分服务需要）</label><input type="password" id="searchApiKey" value="${escapeHtml(state.searchApiKey)}" placeholder="选填"></div>
+        <div class="form-group" style="flex:0;"><label>&nbsp;</label><button class="btn btn-primary" onclick="saveSearchApiConfig()">保存搜索配置</button></div>
+      </div>
+    </div>
+    <div class="card">
+      <h2>系统提示词预览</h2>
+      <div class="result-box" style="max-height:300px;">${escapeHtml(buildFullSystemPrompt())}</div>
+    </div>
+  `;
+}
+
+function renderProjectInput(container) {
+  const hasSearchContext = !!state.searchContext;
+  const localFileCount = state.localFiles.length;
+  container.innerHTML = `
+    <div class="card">
+      <h2>项目信息输入</h2>
+      ${localFileCount > 0 ? `<div class="kb-select-bar" style="background:#e0f2f1;border-color:#80cbc4;">参考资料库已加载 <span class="count" style="color:#00695c;">${localFileCount}</span> 个条目，内容将自动注入研判。 <a href="javascript:void(0)" onclick="switchStep(-3)" style="color:var(--primary-light);">管理参考资料</a></div>` : `<div style="margin-bottom:12px;font-size:12px;color:var(--text-muted);">提示：建议先在 <a href="javascript:void(0)" onclick="switchStep(-3)" style="color:var(--primary-light);">参考资料库</a> 中加载常用政策法规文件，研判时无需重复粘贴。</div>`}
+      ${hasSearchContext ? `<div class="kb-select-bar" style="background:#fff8e1;border-color:#ffe082;">当前已从联网检索注入参考内容。 <a href="javascript:void(0)" onclick="switchStep(-2)" style="color:var(--primary-light);">管理检索结果</a></div>` : ''}
+      <div class="form-group">
+        <label>项目原始材料</label>
+        <div class="hint">可直接粘贴文本，也可以上传文件（Word/PDF/TXT）自动解析填充</div>
+        <div class="file-drop-zone" id="projectFileDropZone" onclick="document.getElementById('projectFileInput').click()" style="padding:16px;">
+          <p>点击上传项目文件，或拖拽文件到此处</p>
+          <p style="font-size:11px;color:#999;">支持格式：.docx / .pdf / .txt / .html（文件内容将自动解析并填充到下方文本框）</p>
+          <input type="file" id="projectFileInput" multiple accept=".docx,.pdf,.txt,.html,.htm" onchange="handleProjectFiles(this.files)" style="display:none;">
+        </div>
+        <div id="projectFileProgress" style="font-size:12px;margin:4px 0;"></div>
+        <textarea id="projectInfo" placeholder="请粘贴项目备案证、可研报告、项目简介等文本内容，或直接上传文件自动解析...">${escapeHtml(state.projectInfo)}</textarea>
+      </div>
+      <div class="form-group">
+        <label>临时补充材料（可选）</label>
+        <div class="hint">此处粘贴的内容仅本次项目使用，不会存入参考资料库。如需长期保存，请使用上方"参考资料库"功能。</div>
+        <textarea id="knowledgeBase" placeholder="粘贴本次项目特有的补充材料...">${escapeHtml(state.knowledgeBase)}</textarea>
+      </div>
+      <div class="btn-group">
+        <button class="btn btn-primary" onclick="saveProjectInfo()">保存项目信息</button>
+        <button class="btn btn-outline" onclick="clearProjectInfo()">清空</button>
+      </div>
+    </div>
+  `;
+
+  // Drag & drop for project files
+  setTimeout(() => {
+    const dropZone = document.getElementById('projectFileDropZone');
+    if (dropZone) {
+      dropZone.addEventListener('dragover', e => { e.preventDefault(); dropZone.classList.add('dragover'); });
+      dropZone.addEventListener('dragleave', () => dropZone.classList.remove('dragover'));
+      dropZone.addEventListener('drop', e => { e.preventDefault(); dropZone.classList.remove('dragover'); handleProjectFiles(e.dataTransfer.files); });
+    }
+  }, 0);
+}
+
+// ============ MODULE STEP ============
+function renderModuleStep(container, moduleIndex) {
+  const code = `HB-PT-${String(moduleIndex).padStart(3, '0')}`;
+  const label = MODULE_LABELS[code] || code;
+  const result = state.results[code] || '';
+  const isNew = ['HB-PT-000', 'HB-PT-010', 'HB-PT-011'].includes(code);
+  const selectedCount = state.localFiles.length;
+  const hasSearchContext = !!state.searchContext;
+  const localFileCount = state.localFiles.length;
+  const autoSearchInfo = state.autoSearch 
+    ? (state.searchApiUrl 
+      ? '<div class="kb-select-bar" style="background:#e8f5e9;border-color:#a5d6a7;">自动联网检索已开启，运行分析时将自动搜索官方回复和解读 <a href="javascript:void(0)" onclick="switchStep(-2)" style="color:var(--primary-light);">管理</a></div>'
+      : '<div class="kb-select-bar" style="background:#fff3cd;border-color:#ffe082;">自动联网检索已开启，但尚未配置搜索API，请先在 <a href="javascript:void(0)" onclick="switchStep(0)" style="color:var(--primary-light);">API配置</a> 中设置</div>')
+    : '';
+
+  container.innerHTML = `
+    <div class="card">
+      <h2>${code} ${label} ${isNew ? '<span class="badge badge-new">核心模块</span>' : '<span class="badge badge-core">专项研判</span>'}</h2>
+      ${localFileCount > 0 ? `<div class="kb-select-bar" style="background:#e0f2f1;border-color:#80cbc4;">参考资料库已加载 <span class="count" style="color:#00695c;">${localFileCount}</span> 个条目，内容将自动注入研判 <a href="javascript:void(0)" onclick="switchStep(-3)" style="color:var(--primary-light);">管理</a></div>` : ''}
+      ${autoSearchInfo}
+      ${hasSearchContext ? `<div class="kb-select-bar" style="background:#fff8e1;border-color:#ffe082;">上次检索结果已保存在检索面板中，可随时查看。 <a href="javascript:void(0)" onclick="switchStep(-2)" style="color:var(--primary-light);">查看检索结果</a></div>` : ''}
+      ${code === 'HB-PT-000' ? '<div style="margin-bottom:12px;font-size:12px;color:#888;">此模块根据原始项目信息审查资料完整性，并给出建议启动的模块清单。建议先运行此模块。</div>' : ''}
+      ${code === 'HB-PT-010' ? '<div style="margin-bottom:12px;font-size:12px;color:#888;">此模块将各专项研判结果整合为完整的研判报告。请先完成HB-PT-001至HB-PT-009后再运行。</div>' : ''}
+      ${code === 'HB-PT-011' ? '<div style="margin-bottom:12px;font-size:12px;color:#888;">此模块检查各模块输出之间的逻辑一致性，生成人工复核清单。建议在HB-PT-010完成后运行。</div>' : ''}
+      ${code === 'HB-PT-002' || code === 'HB-PT-003' ? `<div style="margin-bottom:12px;font-size:12px;color:#e67e22;background:#fff8e1;padding:8px 12px;border-radius:6px;">提示：此模块容易遇到模棱两可的情况。${state.autoSearch ? '已开启自动检索，工具将自动搜索官方回复辅助判断。' : '建议开启自动联网检索，或手动搜索官方回复再分析。'}</div>` : ''}
+      ${code !== 'HB-PT-000' && code !== 'HB-PT-010' && code !== 'HB-PT-011' ? `<div class="form-group"><label>模块输入信息</label><div class="hint">默认使用HB-PT-001项目概况提取结果，如有需要可在此补充修改。专项参考文件请通过参考资料库加载。</div><textarea id="moduleInput" style="min-height:80px;">${escapeHtml(code === 'HB-PT-001' ? state.projectInfo : (state.results['HB-PT-001'] || state.projectInfo))}</textarea></div>` : ''}
+      <div class="btn-group">
+        <button class="btn btn-primary" id="btnRun" onclick="runModule('${code}')">运行分析</button>
+        ${result ? '<button class="btn btn-outline btn-sm" onclick="copyResult(\'' + code + '\')">复制结果</button>' : ''}
+        ${result ? '<button class="btn btn-outline btn-sm" onclick="showFeedbackModal(\'' + code + '\')" style="color:#e67e22;">反馈修正</button>' : ''}
+        ${result ? '<button class="btn btn-outline btn-sm" onclick="clearResult(\'' + code + '\')">清除结果</button>' : ''}
+      </div>
+      ${result ? `<div class="result-box" id="resultBox">${escapeHtml(result)}</div>` : `<div class="result-box" id="resultBox" style="color:#bbb;text-align:center;padding:40px;">点击"运行分析"查看AI研判结果${state.autoSearch ? '（将自动联网检索）' : ''}</div>`}
+      ${code === 'HB-PT-001' && result ? `
+        <div style="margin-top:16px;padding:14px;background:#f0f7ff;border:1px solid #bbdefb;border-radius:8px;text-align:center;">
+          <p style="font-size:13px;color:#1976d2;margin-bottom:10px;">项目概况已提取完成，可以一键运行所有专项研判模块（HB-PT-002 ~ HB-PT-009）</p>
+          <button class="btn btn-primary" onclick="runAllModules()" style="font-size:14px;padding:10px 28px;">一键运行全部专项研判</button>
+          <p style="font-size:11px;color:#888;margin-top:8px;">运行完成后可逐个查看结果、反馈修正或重新运行</p>
+        </div>
+      ` : ''}
+    </div>
+    <div class="card">
+      <h2>提示词预览</h2>
+      <div class="result-box" style="max-height:200px;font-size:11px;color:#666;" id="promptPreview">加载中...</div>
+    </div>
+  `;
+
+  setTimeout(() => {
+    const previewEl = document.getElementById('promptPreview');
+    if (previewEl) {
+      let prompt;
+      if (code === 'HB-PT-000' || code === 'HB-PT-001') prompt = PROMPTS[code](state.projectInfo || '（项目信息）');
+      else if (code === 'HB-PT-010' || code === 'HB-PT-011') prompt = PROMPTS[code](state.results);
+      else prompt = PROMPTS[code](state.results['HB-PT-001'] || state.projectInfo || '（项目概况）', '');
+      previewEl.textContent = prompt;
+    }
+  }, 0);
+}
+
+// ============ ACTIONS ============
+function saveApiConfig() {
+  state.apiBase = document.getElementById('apiBase').value.trim();
+  state.model = document.getElementById('apiModel').value.trim();
+  state.apiKey = document.getElementById('apiKey').value.trim();
+  saveState(); toast('API配置已保存', 'success');
+}
+
+function saveSearchApiConfig() {
+  state.searchApiUrl = document.getElementById('searchApiUrl').value.trim();
+  state.searchApiKey = document.getElementById('searchApiKey').value.trim();
+  saveState(); toast('搜索API配置已保存', 'success');
+}
+
+function saveProjectInfo() {
+  state.projectInfo = document.getElementById('projectInfo').value.trim();
+  state.knowledgeBase = document.getElementById('knowledgeBase').value.trim();
+  saveState(); toast('项目信息已保存', 'success');
+}
+
+function clearProjectInfo() {
+  state.projectInfo = ''; state.knowledgeBase = ''; state.results = {};
+  saveState(); switchStep(1); toast('已清空项目信息和所有研判结果', 'info');
+}
+
+async function handleProjectFiles(fileList) {
+  if (!fileList || fileList.length === 0) return;
+  const progressEl = document.getElementById('projectFileProgress');
+  const textarea = document.getElementById('projectInfo');
+  
+  for (const file of Array.from(fileList)) {
+    const ext = file.name.split('.').pop().toLowerCase();
+    if (!['docx', 'pdf', 'txt', 'html', 'htm'].includes(ext)) {
+      toast(`不支持的文件格式：${file.name}`, 'error');
+      continue;
+    }
+    
+    if (progressEl) progressEl.textContent = `正在解析：${file.name}...`;
+    
+    try {
+      let content = '';
+      if (ext === 'docx') {
+        content = await parseDocx(file);
+      } else if (ext === 'pdf') {
+        content = await parsePdf(file);
+      } else {
+        content = await readTextFile(file);
+      }
+      
+      if (!content || content.trim().length === 0) {
+        toast(`${file.name} 解析后内容为空`, 'error');
+        continue;
+      }
+      
+      // Append to textarea
+      const header = `\n\n=== ${file.name} ===\n`;
+      if (textarea) {
+        textarea.value = (textarea.value ? textarea.value + header : header) + content;
+        state.projectInfo = textarea.value;
+        saveState();
+      }
+      
+      if (progressEl) progressEl.textContent = `已解析：${file.name}（${content.length} 字）→ 已填充到文本框`;
+      toast(`${file.name} 解析完成`, 'success');
+    } catch (err) {
+      toast(`解析失败：${file.name} - ${err.message}`, 'error');
+      if (progressEl) progressEl.textContent = '';
+    }
+  }
+}
+
+function clearResult(code) { delete state.results[code]; saveState(); renderStep(); updateSidebar(); }
+function copyResult(code) { const text = state.results[code] || ''; navigator.clipboard.writeText(text).then(() => toast('已复制到剪贴板', 'success')); }
+
+async function runAllModules() {
+  if (!state.apiKey) { toast('请先配置API Key', 'error'); return; }
+  if (!state.results['HB-PT-001']) { toast('请先运行HB-PT-001项目概况提取', 'error'); return; }
+  
+  const modules = ['HB-PT-002', 'HB-PT-003', 'HB-PT-004', 'HB-PT-005', 'HB-PT-006', 'HB-PT-007', 'HB-PT-008', 'HB-PT-009'];
+  const total = modules.length;
+  let completed = 0;
+  let failed = 0;
+  
+  // 显示进度弹窗
+  const modal = document.getElementById('modalContainer');
+  modal.innerHTML = `
+    <div class="modal-overlay">
+      <div class="modal" style="max-width:500px;text-align:center;">
+        <h3>批量运行专项研判</h3>
+        <div id="batchProgress" style="font-size:13px;color:#888;margin:12px 0;">准备中...</div>
+        <div id="batchList" style="font-size:12px;text-align:left;max-height:300px;overflow-y:auto;margin:10px 0;"></div>
+        <button class="btn btn-outline btn-sm" onclick="closeModal()" id="btnCloseBatch" disabled>关闭</button>
+      </div>
+    </div>`;
+  
+  const progressEl = document.getElementById('batchProgress');
+  const listEl = document.getElementById('batchList');
+  
+  for (let i = 0; i < modules.length; i++) {
+    const code = modules[i];
+    const label = MODULE_LABELS[code] || code;
+    
+    if (progressEl) progressEl.textContent = `正在运行 ${i + 1}/${total}：${label}`;
+    if (listEl) listEl.innerHTML += `<div style="padding:3px 0;color:#1976d2;">⏳ ${label}...</div>`;
+    if (listEl) listEl.scrollTop = listEl.scrollHeight;
+    
+    try {
+      // 自动联网检索
+      let autoSearchResult = null;
+      if (state.autoSearch && state.searchApiUrl) {
+        autoSearchResult = await autoSearch(code);
+      }
+      
+      let fullSystemPrompt = buildFullSystemPrompt();
+      if (autoSearchResult && autoSearchResult.context) {
+        fullSystemPrompt += `\n\n【自动联网检索结果】\n检索关键词：${autoSearchResult.query}\n\n${autoSearchResult.context}`;
+      }
+      
+      const input = state.results['HB-PT-001'] || state.projectInfo;
+      const userPrompt = PROMPTS[code](input, '');
+      const response = await callDeepSeek(fullSystemPrompt, userPrompt);
+      
+      state.results[code] = response;
+      if (autoSearchResult) {
+        state.results[code] = response + `\n\n---\n【自动联网检索记录】\n检索关键词：${autoSearchResult.query}\n检索结果数：${autoSearchResult.count} 条`;
+        state.searchContext = autoSearchResult.context;
+      }
+      
+      completed++;
+      if (listEl) {
+        const items = listEl.querySelectorAll('div');
+        const last = items[items.length - 1];
+        if (last) last.innerHTML = `✅ ${label} — 完成`;
+        last.style.color = '#27ae60';
+      }
+    } catch (err) {
+      failed++;
+      state.results[code] = `【运行失败】${err.message}`;
+      if (listEl) {
+        const items = listEl.querySelectorAll('div');
+        const last = items[items.length - 1];
+        if (last) last.innerHTML = `❌ ${label} — 失败：${err.message}`;
+        last.style.color = '#e74c3c';
+      }
+    }
+    
+    saveState();
+    updateSidebar();
+    
+    // 避免API限流，间隔一下
+    if (i < modules.length - 1) await new Promise(r => setTimeout(r, 300));
+  }
+  
+  if (progressEl) progressEl.innerHTML = `运行完成：${completed} 个成功${failed > 0 ? `，${failed} 个失败` : ''}`;
+  if (progressEl) progressEl.style.color = failed > 0 ? '#e74c3c' : '#27ae60';
+  document.getElementById('btnCloseBatch').disabled = false;
+  document.getElementById('btnCloseBatch').textContent = '关闭并查看结果';
+  document.getElementById('btnCloseBatch').onclick = () => { closeModal(); switchStep(4); }; // 跳转到第一个专项模块
+  saveState();
+  updateSidebar();
+}
+
+function showFeedbackModal(code) {
+  const label = MODULE_LABELS[code] || code;
+  const currentResult = state.results[code] || '';
+  const modal = document.getElementById('modalContainer');
+  modal.innerHTML = `
+    <div class="modal-overlay">
+      <div class="modal" style="max-width:600px;">
+        <button class="close" onclick="closeModal()">&times;</button>
+        <h3>反馈修正 — ${escapeHtml(label)}</h3>
+        <p style="color:#888;font-size:13px;margin-bottom:8px;">请指出AI分析结果中的错误或需要修正的地方，AI将基于你的反馈重新分析。</p>
+        <div style="background:#f8f9fa;padding:10px;border-radius:6px;margin-bottom:10px;max-height:120px;overflow-y:auto;font-size:12px;color:#666;">
+          <b>当前分析结论摘要：</b><br>${escapeHtml(currentResult.substring(0, 300))}${currentResult.length > 300 ? '...' : ''}
+        </div>
+        <div class="form-group">
+          <label>修正意见</label>
+          <textarea id="feedbackInput" style="min-height:120px;" placeholder="请描述AI分析中哪些地方有误，以及正确的结论应该是什么。例如：&#10;&#10;1. 行业类别应为C2921塑料制品业，不是C2920&#10;2. 环评类别应为报告书，不是报告表&#10;3. 审批权限应为省级，不是市级"></textarea>
+        </div>
+        <div class="btn-group">
+          <button class="btn btn-warning" onclick="rerunWithFeedback('${code}')">根据反馈重新分析</button>
+          <button class="btn btn-outline" onclick="analyzeErrorReasons('${code}')" style="color:#e74c3c;">分析错误原因</button>
+          <button class="btn btn-outline" onclick="closeModal()">取消</button>
+        </div>
+      </div>
+    </div>`;
+}
+
+async function rerunWithFeedback(code) {
+  const feedback = document.getElementById('feedbackInput')?.value.trim();
+  if (!feedback) { toast('请输入修正意见', 'error'); return; }
+  if (!state.apiKey) { toast('请先配置API Key', 'error'); return; }
+  
+  closeModal();
+  const btn = document.getElementById('btnRun');
+  if (btn) { btn.disabled = true; btn.textContent = '重新分析中...'; }
+  const resultBox = document.getElementById('resultBox');
+  if (resultBox) { resultBox.className = 'result-box loading'; resultBox.textContent = '正在根据反馈重新分析，请稍候...'; }
+
+  try {
+    // 构建反馈修正的提示词
+    const previousResult = state.results[code] || '';
+    const label = MODULE_LABELS[code] || code;
+    const feedbackPrompt = `你之前对"${label}"的分析结果如下：
+---
+${previousResult}
+---
+
+用户审阅后指出以下问题，请根据反馈重新分析并修正：
+
+用户反馈：
+${feedback}
+
+请重新输出完整的分析结果，修正用户指出的错误。输出格式与之前保持一致。如果用户反馈涉及对行业类别、环评类别、审批权限等关键判定的修正，请在修正后的结论中明确标注"已根据用户反馈修正"。
+
+【以上分析由AI辅助生成，最终结论需经环评工程师人工复核确认】`;
+
+    const fullSystemPrompt = buildFullSystemPrompt();
+    const response = await callDeepSeek(fullSystemPrompt, feedbackPrompt);
+    state.results[code] = response;
+    saveState();
+    renderStep();
+    updateSidebar();
+    toast('已根据反馈重新分析', 'success');
+  } catch (err) {
+    if (resultBox) { resultBox.className = 'result-box error'; resultBox.textContent = `错误：${err.message}`; }
+    toast(`重新分析失败：${err.message}`, 'error');
+  } finally {
+    if (btn) { btn.disabled = false; btn.textContent = '运行分析'; }
+  }
+}
+
+async function analyzeErrorReasons(code) {
+  const feedback = document.getElementById('feedbackInput')?.value.trim();
+  if (!feedback) { toast('请先输入修正意见', 'error'); return; }
+  if (!state.apiKey) { toast('请先配置API Key', 'error'); return; }
+  
+  closeModal();
+  const btn = document.getElementById('btnRun');
+  if (btn) { btn.disabled = true; btn.textContent = '分析中...'; }
+  const resultBox = document.getElementById('resultBox');
+  if (resultBox) { resultBox.className = 'result-box loading'; resultBox.textContent = '正在分析错误原因，请稍候...'; }
+
+  try {
+    const previousResult = state.results[code] || '';
+    const label = MODULE_LABELS[code] || code;
+    const analysisPrompt = `你之前对"${label}"的分析结果如下：
+---
+${previousResult}
+---
+
+用户审阅后指出以下错误：
+${feedback}
+
+请分析你为什么会犯这些错误，按以下格式回答：
+
+一、错误类型归类（属于以下哪种）
+- 信息理解偏差：对项目信息、工艺描述等理解有误
+- 政策引用错误：引用了错误的政策文件或条款
+- 分类判定失误：行业类别、环评类别等对照标准判定错误
+- 知识盲区：缺乏该领域的专业知识或最新政策信息
+- 推理逻辑错误：分析逻辑链条存在问题
+- 其他（请说明）
+
+二、具体原因分析（逐条说明每个错误点产生的原因）
+
+三、改进建议（今后遇到类似任务时，AI应如何避免此类错误）
+
+请坦诚分析，不要回避问题。`;
+
+    const response = await callDeepSeek(buildFullSystemPrompt(), analysisPrompt);
+    state.results[code] = response;
+    saveState();
+    renderStep();
+    updateSidebar();
+    toast('错误原因分析完成', 'success');
+  } catch (err) {
+    if (resultBox) { resultBox.className = 'result-box error'; resultBox.textContent = `错误：${err.message}`; }
+    toast(`分析失败：${err.message}`, 'error');
+  } finally {
+    if (btn) { btn.disabled = false; btn.textContent = '运行分析'; }
+  }
+}
+
+async function runModule(code) {
+  if (!state.apiKey) { toast('请先在"API配置"中设置API Key', 'error'); switchStep(0); return; }
+  const btn = document.getElementById('btnRun'); if (btn) { btn.disabled = true; btn.textContent = '分析中...'; }
+  const resultBox = document.getElementById('resultBox'); if (resultBox) { resultBox.className = 'result-box loading'; resultBox.textContent = '正在调用AI进行分析，请稍候...'; }
+
+  try {
+    // === 自动联网检索 ===
+    let autoSearchResult = null;
+    if (state.autoSearch && state.searchApiUrl) {
+      if (resultBox) resultBox.textContent = '正在自动联网检索官方回复和解读文件...';
+      autoSearchResult = await autoSearch(code);
+      if (autoSearchResult) {
+        // 保存检索结果到state，供后续查看
+        if (resultBox) resultBox.textContent = `自动检索完成（找到 ${autoSearchResult.count} 条结果），正在调用AI分析...`;
+      } else {
+        if (resultBox) resultBox.textContent = '自动检索未获取到结果，直接调用AI分析...';
+      }
+    }
+    
+    // 构建系统提示词（含自动检索结果）
+    let fullSystemPrompt = buildFullSystemPrompt();
+    if (autoSearchResult && autoSearchResult.context) {
+      fullSystemPrompt += `\n\n【自动联网检索结果——工具自动搜索到的官方回复和解读文件，请基于这些信息辅助判断】\n检索关键词：${autoSearchResult.query}\n\n${autoSearchResult.context}`;
+    }
+
+    let userPrompt;
+    if (code === 'HB-PT-000' || code === 'HB-PT-001') userPrompt = PROMPTS[code](state.projectInfo);
+    else if (code === 'HB-PT-010' || code === 'HB-PT-011') userPrompt = PROMPTS[code](state.results);
+    else {
+      const inputEl = document.getElementById('moduleInput');
+      const input = inputEl ? inputEl.value.trim() : (state.results['HB-PT-001'] || state.projectInfo);
+      userPrompt = PROMPTS[code](input, '');
+    }
+
+    const response = await callDeepSeek(fullSystemPrompt, userPrompt);
+    state.results[code] = response;
+    
+    // 保存自动检索结果以便在结果中展示
+    if (autoSearchResult) {
+      state.results[code] = response + `\n\n---\n【自动联网检索记录】\n检索关键词：${autoSearchResult.query}\n检索结果数：${autoSearchResult.count} 条\n检索时间：${new Date().toLocaleString('zh-CN')}`;
+      // 同时保存到searchContext供检索面板查看
+      state.searchContext = autoSearchResult.context;
+      state.searchResults = null; // 清除旧的手动搜索结果
+    }
+    
+    saveState(); renderStep(); updateSidebar();
+    if (autoSearchResult) toast(`分析完成（已自动检索 ${autoSearchResult.count} 条官方信息）`, 'success');
+    else if (code === 'HB-PT-000') toast('资料审查完成！', 'success');
+    else if (code === 'HB-PT-010') toast('综合研判报告已生成！', 'success');
+    else toast(`${code} 分析完成`, 'success');
+  } catch (err) {
+    if (resultBox) { resultBox.className = 'result-box error'; resultBox.textContent = `错误：${err.message}`; }
+    toast(`分析失败：${err.message}`, 'error');
+  } finally { if (btn) { btn.disabled = false; btn.textContent = '运行分析'; } }
+}
+
+function resetAll() {
+  if (confirm('确定要重置所有数据吗？这将清除项目信息、研判结果和API配置。参考资料和检索结果不会受影响。')) {
+    state.apiKey = ''; state.apiBase = 'https://api.deepseek.com/v1'; state.model = 'deepseek-chat';
+    state.projectInfo = ''; state.knowledgeBase = ''; state.extraFiles = { planning: '', threeLines: '', industryPrinciple: '', similarReport: '' };
+    state.results = {}; state.currentStep = 0; state.selectedKbIds = [];
+    state.searchContext = ''; state.searchResults = null;
+    saveState(); renderStep(); updateSidebar(); toast('已重置（参考资料和检索结果保留）', 'info');
+  }
+}
+
+function exportReport() {
+  const report = state.results['HB-PT-010'];
+  if (!report) { toast('请先生成综合研判报告（HB-PT-010）', 'error'); return; }
+  let fullText = '═══════════════════════════════════\n  环评前期研判报告（AI辅助生成）\n═══════════════════════════════════\n';
+  fullText += `生成时间：${new Date().toLocaleString()}\n团队：环评研审先锋队 / 湖北君邦环境技术有限责任公司\n\n${report}\n\n---\n`;
+  if (state.results['HB-PT-011']) fullText += '\n═══════════════════════════════════\n  交叉一致性核查报告\n═══════════════════════════════════\n\n' + state.results['HB-PT-011'];
+  const blob = new Blob([fullText], { type: 'text/plain;charset=utf-8' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a'); a.href = url; a.download = `环评前期研判报告_${new Date().toISOString().slice(0,10)}.txt`; a.click();
+  URL.revokeObjectURL(url); toast('报告已导出', 'success');
+}
+
+function escapeHtml(str) { if (!str) return ''; return str.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;'); }
+
+// ============ INIT ============
+function init() { migrateOldKbEntries(); renderStep(); updateSidebar(); }
+init();
+</script>
+<script src="/assets/prototype_backend_adapter.js?v=20260718-node-failure"></script>
+</body>
+</html>

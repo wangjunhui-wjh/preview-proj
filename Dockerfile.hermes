@@ -1,0 +1,57 @@
+ARG HERMES_BASE_IMAGE=nousresearch/hermes-agent:latest@sha256:17e5c3db7d47af9d76ac2f5331d3b5d310535830f372d0a5b73c3924294e1017
+FROM ${HERMES_BASE_IMAGE}
+
+ARG APT_MIRROR=https://mirrors.tuna.tsinghua.edu.cn/debian
+ARG APT_SECURITY_MIRROR=https://mirrors.tuna.tsinghua.edu.cn/debian-security
+ARG PIP_INDEX_URL=https://pypi.tuna.tsinghua.edu.cn/simple
+
+USER root
+
+# Desktop local-terminal mode needs document tools in the Controller image.
+# The server edition uses the same Controller image but executes project work
+# in Hermes' native Docker terminal image instead.
+RUN set -eu; \
+    if [ -f /etc/apt/sources.list.d/debian.sources ]; then \
+        sed -i \
+            -e "s|https\?://deb.debian.org/debian-security|${APT_SECURITY_MIRROR}|g" \
+            -e "s|https\?://security.debian.org/debian-security|${APT_SECURITY_MIRROR}|g" \
+            -e "s|https\?://deb.debian.org/debian|${APT_MIRROR}|g" \
+            /etc/apt/sources.list.d/debian.sources; \
+    fi; \
+    apt-get update; \
+    apt-get install -y --no-install-recommends \
+        fonts-noto-cjk \
+        libreoffice-calc \
+        libreoffice-core \
+        libreoffice-impress \
+        libreoffice-writer \
+        poppler-utils \
+        tesseract-ocr \
+        tesseract-ocr-chi-sim \
+        tesseract-ocr-eng \
+        tesseract-ocr-osd \
+        unzip; \
+    rm -rf /var/lib/apt/lists/*
+
+RUN uv pip install --python /opt/hermes/.venv/bin/python --no-cache \
+        --index-url "${PIP_INDEX_URL}" \
+        ddgs==9.14.4 \
+        openpyxl==3.1.5 \
+        pdfplumber==0.11.8 \
+        pypdf==6.6.0 \
+        pymupdf==1.26.7 \
+        python-docx==1.2.0 \
+        python-pptx==1.0.2 \
+        pytesseract==0.3.13
+
+# This hook runs before Hermes' own 01-hermes-setup hook. It only materializes
+# environment-derived config; the official s6 entrypoint remains PID 1 and
+# continues to own UID remapping, Gateway supervision and tool execution.
+COPY --chmod=0755 docker/hermes/start-hermes.sh /etc/cont-init.d/00-eia-config
+
+RUN mkdir -p /workspace /eia/workspaces /eia/outputs /eia/vision-cache
+
+WORKDIR /workspace
+
+HEALTHCHECK --interval=30s --timeout=10s --start-period=60s --retries=10 \
+  CMD curl -fsS http://127.0.0.1:8642/health >/dev/null || exit 1

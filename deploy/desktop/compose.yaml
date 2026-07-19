@@ -1,0 +1,123 @@
+services:
+  hermes:
+    build:
+      context: ../..
+      dockerfile: Dockerfile.hermes
+      args:
+        PIP_INDEX_URL: ${PIP_INDEX_URL:-https://pypi.tuna.tsinghua.edu.cn/simple}
+    image: ${HERMES_IMAGE:-eia-ai-hermes-controller:0.2.0}
+    restart: unless-stopped
+    command: ["gateway", "run"]
+    environment:
+      HERMES_UID: ${HOST_UID:-1000}
+      HERMES_GID: ${HOST_GID:-1000}
+      HERMES_HOME: /opt/data
+      HERMES_API_SERVER_KEY: ${HERMES_API_SERVER_KEY:-}
+      HERMES_WRITE_SAFE_ROOT: /opt/data:/eia/outputs
+      OPENAI_MODEL: ${OPENAI_MODEL:-}
+      OPENAI_API_KEY: ${OPENAI_API_KEY:-}
+      OPENAI_BASE_URL: ${OPENAI_BASE_URL:-}
+      HERMES_REASONING_EFFORT: ${HERMES_REASONING_EFFORT:-xhigh}
+      HERMES_MAX_TURNS: ${HERMES_MAX_TURNS:-60}
+      HERMES_MAX_CONCURRENT_RUNS: ${HERMES_MAX_CONCURRENT_RUNS:-2}
+      HERMES_TERMINAL_BACKEND: local
+      HERMES_TERMINAL_CWD: /opt/data/workspace
+      HERMES_TERMINAL_TIMEOUT: ${HERMES_TERMINAL_TIMEOUT:-900}
+      HERMES_WEB_BACKEND: ${HERMES_WEB_BACKEND:-ddgs}
+      HERMES_WEB_SEARCH_BACKEND: ${HERMES_WEB_SEARCH_BACKEND:-ddgs}
+      FIRECRAWL_API_KEY: ${FIRECRAWL_API_KEY:-}
+      TAVILY_API_KEY: ${TAVILY_API_KEY:-}
+      EXA_API_KEY: ${EXA_API_KEY:-}
+      PARALLEL_API_KEY: ${PARALLEL_API_KEY:-}
+    ports:
+      - "127.0.0.1:${HERMES_PORT:-8642}:8642"
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    volumes:
+      - ./runtime/hermes:/opt/data
+      - ./runtime/data/workspaces:/eia/workspaces:ro
+      - ./runtime/data/vision-cache:/eia/vision-cache
+      - ./runtime/outputs:/eia/outputs
+    working_dir: /opt/data/workspace
+    healthcheck:
+      test: ["CMD-SHELL", "curl -fsS http://127.0.0.1:8642/health >/dev/null || exit 1"]
+      interval: 15s
+      timeout: 10s
+      start_period: 60s
+      retries: 20
+    stop_grace_period: 30s
+    networks:
+      - desktop
+
+  backend:
+    build:
+      context: ../..
+      dockerfile: Dockerfile.backend
+      args:
+        PIP_INDEX_URL: ${PIP_INDEX_URL:-https://pypi.tuna.tsinghua.edu.cn/simple}
+        REQUIREMENTS_FILE: ${REQUIREMENTS_FILE:-requirements.lock}
+    image: ${BACKEND_IMAGE:-eia-ai-backend:0.2.0}
+    restart: unless-stopped
+    init: true
+    user: "${HOST_UID:-1000}:${HOST_GID:-1000}"
+    environment:
+      EIA_DEPLOYMENT_EDITION: desktop
+      EIA_AUTO_RECOVER_RUNNING_TASKS: "true"
+      HERMES_BASE_URL: http://hermes:8642
+      HERMES_API_KEY: ${HERMES_API_SERVER_KEY:-}
+      HERMES_MODEL: hermes-agent
+      HERMES_REQUEST_TIMEOUT: ${HERMES_REQUEST_TIMEOUT:-3600}
+      UPLOAD_DIR: /app/data/uploads
+      LANGGRAPH_CHECKPOINT_DIR: /app/data/tasks
+      LANGGRAPH_CHECKPOINT_DB: /app/data/langgraph_checkpoints.sqlite
+      TASK_WORKSPACE_DIR: /app/data/workspaces
+      VISION_CACHE_DIR: /app/data/vision-cache
+      KNOWLEDGE_DIR: /app/data/knowledge
+      DATABASE_URL: sqlite:////app/data/app.db
+      OUTPUT_DIR: /app/outputs
+      LOG_DIR: /app/logs
+      AGENT_WORKSPACE_ROOT: /eia/workspaces
+      AGENT_OUTPUT_ROOT: /eia/outputs
+      AGENT_VISION_CACHE_ROOT: /eia/vision-cache
+      HERMES_CONTROLLER_VISION_ROOT: /eia/vision-cache
+    ports:
+      - "127.0.0.1:${APP_PORT:-8501}:8501"
+    volumes:
+      - ./runtime/data:/app/data
+      - ./runtime/logs:/app/logs
+      - ./runtime/outputs:/app/outputs
+      - ./runtime/state:/app/.state
+    depends_on:
+      hermes:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "python -c \"import urllib.request; urllib.request.urlopen('http://127.0.0.1:8501/api/ready', timeout=8).read()\" || exit 1"]
+      interval: 15s
+      timeout: 10s
+      start_period: 45s
+      retries: 20
+    stop_grace_period: 30s
+    networks:
+      - desktop
+
+  backup:
+    image: ${BACKUP_IMAGE:-alpine:3.21@sha256:48b0309ca019d89d40f670aa1bc06e426dc0931948452e8491e3d65087abc07d}
+    profiles: ["tools"]
+    restart: "no"
+    network_mode: none
+    environment:
+      BACKUP_FILE: ${BACKUP_FILE:-eia-desktop-backup.tgz}
+      BACKUP_OWNER: "${HOST_UID:-1000}:${HOST_GID:-1000}"
+    entrypoint: ["/bin/sh", "-eu", "-c"]
+    command:
+      - >-
+        tar --exclude='./hermes/.env' --exclude='./hermes/auth.json'
+        -czf "/backups/$${BACKUP_FILE}" -C /runtime .
+        && chown "$${BACKUP_OWNER}" "/backups/$${BACKUP_FILE}"
+    volumes:
+      - ./runtime:/runtime:ro
+      - ./backups:/backups
+
+networks:
+  desktop:
+    driver: bridge
