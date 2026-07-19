@@ -53,3 +53,4 @@
 
 - Rewrote delivery-facing README/install/Hermes guidance to separate development-only Gateway use from the two fully containerized delivery editions.
 - Updated persistent recovery state, implementation plan and final acceptance record. Next action is normal maintenance or a new release; no smoke Compose stack remains running.
+- Committed the delivery as `5086152` and pushed it to `git@github.com:wangjunhui-wjh/preview-proj.git` through GitHub SSH-over-443 after the local network blocked port 22.
