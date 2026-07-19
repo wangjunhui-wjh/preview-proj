@@ -4,6 +4,10 @@
     'HB-PT-000', 'HB-PT-001', 'HB-PT-002', 'HB-PT-003', 'HB-PT-004', 'HB-PT-005',
     'HB-PT-006', 'HB-PT-007', 'HB-PT-008', 'HB-PT-009', 'HB-PT-010', 'HB-PT-011',
   ];
+  const SPECIALTY_NODES = [
+    'HB-PT-002', 'HB-PT-003', 'HB-PT-004', 'HB-PT-005',
+    'HB-PT-006', 'HB-PT-007', 'HB-PT-008', 'HB-PT-009',
+  ];
   const STEP_NODE_MAP = {
     1: 'PREP-INGEST',
     2: 'HB-PT-000',
@@ -690,12 +694,19 @@
   runAllModules = async function () {
     try {
       await ensureTask();
-      if (state.nextNode && state.nextNode !== 'HB-PT-002') {
-        throw new Error(`当前任务下一节点是 ${state.nextNode}，请先完成到 HB-PT-001`);
+      await refreshTask(false);
+      if (!state.results['HB-PT-001']) {
+        throw new Error('请先完成 HB-PT-001 项目概况提取');
+      }
+      const needsReset = state.nextNode !== 'HB-PT-002'
+        || SPECIALTY_NODES.some(code => Object.prototype.hasOwnProperty.call(state.results, code));
+      if (needsReset) {
+        await apiFetch(`/api/tasks/${state.taskId}/rerun/HB-PT-002`, { method: 'POST' });
+        await refreshTask(false);
       }
       state.taskStatus = 'running';
-      state.currentNode = state.nextNode || 'HB-PT-002';
-      state.runStatusMessage = '正在连续运行全部专项研判';
+      state.currentNode = 'HB-PT-002';
+      state.runStatusMessage = needsReset ? '正在重新运行全部专项研判' : '正在连续运行全部专项研判';
       saveState();
       renderStep();
       updateSidebar();
@@ -709,7 +720,9 @@
       state.taskStatus = response.status;
       state.nextNode = response.next_node || '';
       saveState();
-      toast('已启动全部专项研判，完成后停在综合报告前', 'success');
+      toast(needsReset
+        ? '已保留项目概况，并从 HB-PT-002 重新运行全部专项研判'
+        : '已启动全部专项研判，完成后停在综合报告前', 'success');
       renderStep();
       updateSidebar();
     } catch (err) {

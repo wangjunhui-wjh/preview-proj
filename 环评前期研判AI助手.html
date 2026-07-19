@@ -1846,6 +1846,8 @@ function renderModuleStep(container, moduleIndex) {
   const code = `HB-PT-${String(moduleIndex).padStart(3, '0')}`;
   const label = MODULE_LABELS[code] || code;
   const result = state.results[code] || '';
+  const hasSpecialtyResults = ['HB-PT-002', 'HB-PT-003', 'HB-PT-004', 'HB-PT-005', 'HB-PT-006', 'HB-PT-007', 'HB-PT-008', 'HB-PT-009']
+    .some(nodeId => Object.prototype.hasOwnProperty.call(state.results, nodeId));
   const isNew = ['HB-PT-000', 'HB-PT-010', 'HB-PT-011'].includes(code);
   const selectedCount = state.localFiles.length;
   const hasSearchContext = !!state.searchContext;
@@ -1876,9 +1878,9 @@ function renderModuleStep(container, moduleIndex) {
       ${result ? `<div class="result-box" id="resultBox">${escapeHtml(result)}</div>` : `<div class="result-box" id="resultBox" style="color:#bbb;text-align:center;padding:40px;">点击"运行分析"查看AI研判结果${state.autoSearch ? '（将自动联网检索）' : ''}</div>`}
       ${code === 'HB-PT-001' && result ? `
         <div style="margin-top:16px;padding:14px;background:#f0f7ff;border:1px solid #bbdefb;border-radius:8px;text-align:center;">
-          <p style="font-size:13px;color:#1976d2;margin-bottom:10px;">项目概况已提取完成，可以一键运行所有专项研判模块（HB-PT-002 ~ HB-PT-009）</p>
-          <button class="btn btn-primary" onclick="runAllModules()" style="font-size:14px;padding:10px 28px;">一键运行全部专项研判</button>
-          <p style="font-size:11px;color:#888;margin-top:8px;">运行完成后可逐个查看结果、反馈修正或重新运行</p>
+          <p style="font-size:13px;color:#1976d2;margin-bottom:10px;">${hasSpecialtyResults ? '项目概况已保留，可以清理旧专项结果并从 HB-PT-002 重新运行。' : '项目概况已提取完成，可以一键运行所有专项研判模块（HB-PT-002 ~ HB-PT-009）'}</p>
+          <button class="btn btn-primary" onclick="runAllModules()" style="font-size:14px;padding:10px 28px;">${hasSpecialtyResults ? '重新一键运行全部专项研判' : '一键运行全部专项研判'}</button>
+          <p style="font-size:11px;color:#888;margin-top:8px;">${hasSpecialtyResults ? '不会重新读取上传资料或提取项目概况；旧专项、综合报告和交叉核查结果会被清理。' : '运行完成后可逐个查看结果、反馈修正或重新运行'}</p>
         </div>
       ` : ''}
     </div>
@@ -2268,6 +2270,6 @@ function escapeHtml(str) { if (!str) return ''; return str.replace(/&/g, '&amp;'
 function init() { migrateOldKbEntries(); renderStep(); updateSidebar(); }
 init();
 </script>
-<script src="/assets/prototype_backend_adapter.js?v=20260718-node-failure"></script>
+<script src="/assets/prototype_backend_adapter.js?v=20260719-specialty-rerun"></script>
 </body>
 </html>

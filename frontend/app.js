@@ -328,6 +328,10 @@ const BACKEND_IMPLEMENTED_NODES = [
   'HB-PT-000', 'HB-PT-001', 'HB-PT-002', 'HB-PT-003', 'HB-PT-004', 'HB-PT-005',
   'HB-PT-006', 'HB-PT-007', 'HB-PT-008', 'HB-PT-009', 'HB-PT-010', 'HB-PT-011',
 ];
+const SPECIALTY_NODES = [
+  'HB-PT-002', 'HB-PT-003', 'HB-PT-004', 'HB-PT-005',
+  'HB-PT-006', 'HB-PT-007', 'HB-PT-008', 'HB-PT-009',
+];
 const STEP_NODE_MAP = {
   1: 'PREP-INGEST',
   2: 'HB-PT-000',
@@ -2549,6 +2553,7 @@ function renderModuleStep(container, moduleIndex) {
   const implemented = BACKEND_IMPLEMENTED_NODES.includes(code);
   const autoSearchInfo = '<div class="kb-select-bar" style="background:#eef7ff;border-color:#bbdefb;">文档读取、图片识别和联网检索由后端 Hermes Agent 在节点内部自主执行；前端只负责提交任务、显示事件和结果。</div>';
   const liveText = state.liveOutput[code] || '';
+  const hasSpecialtyResults = SPECIALTY_NODES.some(nodeId => Object.prototype.hasOwnProperty.call(state.results, nodeId));
 
   container.innerHTML = `
     <div class="card">
@@ -2578,9 +2583,9 @@ function renderModuleStep(container, moduleIndex) {
 	      ${liveText ? renderResultBox(liveText, { loading: true }) : (result ? renderResultBox(result) : renderResultBox('', { placeholder: '点击"运行分析"启动后端 Agent 节点', placeholderStyle: 'color:#bbb;text-align:center;padding:40px;' }))}
       ${code === 'HB-PT-001' && result && state.taskStatus !== 'running' ? `
         <div style="margin-top:16px;padding:14px;background:#f0f7ff;border:1px solid #bbdefb;border-radius:8px;text-align:center;">
-          <p style="font-size:13px;color:#1976d2;margin-bottom:10px;">项目概况已提取完成，可以一键运行专项研判模块（HB-PT-002 ~ HB-PT-009）。</p>
-          <button class="btn btn-primary" onclick="runSpecialModules().catch(err => toast(err.message, 'error'))" style="font-size:14px;padding:10px 28px;">一键运行全部专项研判</button>
-          <p style="font-size:11px;color:#888;margin-top:8px;">完成后停在综合报告前，可逐个查看结果、反馈修正或继续生成报告。</p>
+          <p style="font-size:13px;color:#1976d2;margin-bottom:10px;">${hasSpecialtyResults ? '项目概况已保留，可以清理旧专项结果并从 HB-PT-002 重新运行。' : '项目概况已提取完成，可以一键运行专项研判模块（HB-PT-002 ~ HB-PT-009）。'}</p>
+          <button class="btn btn-primary" onclick="runSpecialModules().catch(err => toast(err.message, 'error'))" style="font-size:14px;padding:10px 28px;">${hasSpecialtyResults ? '重新一键运行全部专项研判' : '一键运行全部专项研判'}</button>
+          <p style="font-size:11px;color:#888;margin-top:8px;">${hasSpecialtyResults ? '不会重新读取上传资料或提取项目概况；旧专项、综合报告和交叉核查结果会被清理。' : '完成后停在综合报告前，可逐个查看结果、反馈修正或继续生成报告。'}</p>
         </div>
       ` : ''}
       <div style="margin-top:14px;">
@@ -2681,8 +2686,15 @@ async function runModule(code) {
 
 async function runSpecialModules() {
   await ensureBackendTask();
-  if (state.nextNode && state.nextNode !== 'HB-PT-002') {
-    throw new Error(`当前任务下一节点是 ${state.nextNode}，请先完成到 HB-PT-001`);
+  await refreshTask();
+  if (!state.results['HB-PT-001']) {
+    throw new Error('请先完成 HB-PT-001 项目概况提取');
+  }
+  const needsReset = state.nextNode !== 'HB-PT-002'
+    || SPECIALTY_NODES.some(code => Object.prototype.hasOwnProperty.call(state.results, code));
+  if (needsReset) {
+    await apiFetch(`/api/tasks/${state.taskId}/rerun/HB-PT-002`, { method: 'POST' });
+    await refreshTask();
   }
   connectTaskEvents(state.taskId);
   const response = await apiFetch(`/api/tasks/${state.taskId}/run-until`, {
@@ -2695,7 +2707,9 @@ async function runSpecialModules() {
   saveState();
   renderStep();
   updateSidebar();
-  toast('已启动专项一键分析，完成后会停在综合报告前', 'success');
+  toast(needsReset
+    ? '已保留项目概况，并从 HB-PT-002 重新运行全部专项研判'
+    : '已启动专项一键分析，完成后会停在综合报告前', 'success');
 }
 
 function showFeedbackModal(code) {

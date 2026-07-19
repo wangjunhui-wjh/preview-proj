@@ -12,9 +12,9 @@
 
 ## Current State
 
-- current_step: `MODEL-COMPARISON-01`
-- next_step: `TEST_HB002_WITH_GPT_5_6_TERRA`
-- status: `gpt_5_6_terra_active_waiting_for_comparison_test`
+- current_step: `POC-RERUN-SPECIAL-01`
+- next_step: `MONITOR_SPECIALTY_RERUN_ACTIVE_TASK`
+- status: `specialty_rerun_live_verified_hb002_running`
 - last_updated: `2026-07-19 Asia/Shanghai`
 - target_route: `Hermes Agent + LangGraph + uploaded HTML prototype`
 - active_agents: `Desktop Compose Hermes API Server eia-desktop-hermes-1, provider:custom:eia-managed, model:gpt-5.6-terra, terminal:local in Controller container`; `Desktop Compose backend eia-desktop-backend-1 on http://127.0.0.1:8501`
@@ -103,6 +103,10 @@
 - 历史运行日志与报告产物，仅保留 `.gitkeep`
 
 ## Change Log
+
+- 2026-07-19 Asia/Shanghai: `POC-RERUN-SPECIAL-01` 在线验收完成。页面在任务 `3e66d0a2-9e8b-42f1-b02d-6401a85a8bb0` 上真实调用 `/rerun/HB-PT-002`，后端仅清理 `HB-PT-002` 至 `HB-PT-011`，保留上传资料、`PREP-INGEST`、`HB-PT-000` 和 `HB-PT-001`；随后自动调用 `/run-until` 并从 `HB-PT-002` 连续运行至 `HB-PT-009`。Desktop backend 已发布新前端且 healthy，Hermes 未重建；当前 GPT-5.6 Terra run `run_eff55a92ad0048c489c2c05fe4046dcf` 正在执行，未被本次收尾中断。详见 `logs/specialty_rerun_20260719.md`。
+
+- 2026-07-19 Asia/Shanghai: `POC-RERUN-SPECIAL-01` 实现阶段完成，待静态检查与 Desktop 前端更新。当前实际原型适配层和拆分版前端均已恢复“重新一键运行全部专项研判”：当任务已经运行过专项流程时，先调用后端现有 `/rerun/HB-PT-002` 清理 `HB-PT-002` 及全部下游结果，再连续运行至 `HB-PT-009`；`PREP-INGEST`、`HB-PT-000`、`HB-PT-001` 及上传资料保持不变。现有测试任务未被自动重置或重跑。
 
 - 2026-07-19 Asia/Shanghai: `MODEL-COMPARISON-01` 完成。按用户要求将 `deploy/desktop/.env` 的 `OPENAI_MODEL` 切换为 `gpt-5.6-terra`，保持 API URL、Key 和任务资料不变；通过 `deploy/desktop/lib.sh` 的环境隔离包装器仅重建 Hermes，确认容器实际模型为 `gpt-5.6-terra`、URL 为 `https://api.aiboys.xyz/v1`，backend/Hermes healthy。未自动重跑当前任务，等待用户使用相同 HB-PT-002 流程进行模型对照测试。详见 `logs/model_switch_20260719.md`。
 
