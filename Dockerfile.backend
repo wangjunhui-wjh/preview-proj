@@ -18,11 +18,7 @@ COPY backend ./backend
 COPY frontend ./frontend
 COPY prompts ./prompts
 COPY "环评前期研判AI助手.html" ./
-COPY "环评前期研判AI助手(2).html" ./
 COPY README.md ./
-COPY 实施方案.md ./
-COPY Hermes服务运行手册.md ./
-COPY llm开发经验.md ./
 
 RUN mkdir -p data/vision-cache logs outputs .state
 

@@ -15,7 +15,7 @@
 
 服务器部署请直接进入 `deploy/server/` 并运行 `./start.sh`。两个版本的 `.env`、运行数据、备份和 Compose 项目名完全分离，可同时存在。
 
-完整安装、离线镜像和备份说明见 [安装说明-DockerCompose.md](安装说明-DockerCompose.md)；各版本的细节分别见 [单机版说明](deploy/desktop/README.md)、[服务器版说明](deploy/server/README.md) 和 [Docker 交付入口](deploy/README.md)。
+完整安装、离线镜像和备份说明见 [安装指南](docs/operations/安装说明-DockerCompose.md)；各版本的细节分别见 [单机版说明](deploy/desktop/README.md)、[服务器版说明](deploy/server/README.md) 和 [Docker 交付入口](deploy/README.md)。
 
 ## 项目结构
 
@@ -25,11 +25,13 @@ frontend/      原型后端适配、实时事件与 Word 风格结果预览
 prompts/       PREP-INGEST 与 HB-PT 节点提示词
 deploy/        单机版、服务器版、离线镜像工具
 docker/        Hermes 官方镜像的配置生成钩子
-data/          本地开发运行数据，默认不纳入 Git
-logs/          持久工程实施日志
-outputs/       设计、验收和业务导出产物
+logs/          持久工程实施日志（不存放运行时日志）
+outputs/       保留的设计与验收文档
+archive/       本地历史资料归档，不纳入 Git 或 Docker 构建
 .state/        长任务可恢复进度
 ```
+
+运行数据按部署版本隔离在 `deploy/desktop/runtime/` 或 `deploy/server/runtime/`。这些目录包含任务、上传资料、知识库、日志和 Hermes 状态，运行期间不得手动整理或移动；根目录的历史测试资料统一放入 `archive/`。
 
 ## 开发运行
 

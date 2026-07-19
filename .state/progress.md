@@ -12,9 +12,9 @@
 
 ## Current State
 
-- current_step: `MAINTENANCE-LLM-02`
-- next_step: `MAINTENANCE_or_next_release`
-- status: `desktop_oai_configuration_simplified`
+- current_step: `MAINTENANCE-DESKTOP-BRANCH-01`
+- next_step: `PUSH_DESKTOP_EDITION_ON_NETWORK_RECOVERY`
+- status: `desktop_edition_branch_committed_push_pending_network`
 - last_updated: `2026-07-19 Asia/Shanghai`
 - target_route: `Hermes Agent + LangGraph + uploaded HTML prototype`
 - active_agents: `Desktop Compose Hermes API Server eia-desktop-hermes-1, provider:custom:eia-managed, model:grok-4.5, terminal:local in Controller container`; `Desktop Compose backend eia-desktop-backend-1 on http://127.0.0.1:8501`
@@ -103,6 +103,12 @@
 - 历史运行日志与报告产物，仅保留 `.gitkeep`
 
 ## Change Log
+
+- 2026-07-19 Asia/Shanghai: `MAINTENANCE-DESKTOP-BRANCH-01` 完成。按用户要求创建仅含单机版交付所需文件的孤立 `desktop-edition` 分支，工作在独立 worktree，未切换当前 `main` 工作区、未触碰运行中的 Desktop 容器或 `deploy/desktop/runtime/`。分支仅提交应用源码、提示词、Desktop Compose/脚本/示例配置、两个实际使用的 Dockerfile、Hermes 启动钩子、依赖清单与当前运行入口 HTML，共 57 个文件；明确排除运行数据、`.env`、归档、PPT、历史输出/日志、测试脚本、Qoder Skill、服务器版和离线镜像。Python 编译、前端 JS 语法和 Compose config 均通过。本地提交为 `dad3bd9`；SSH-over-443 两次推送都在 GitHub 密钥交换阶段被本地网络关闭，因此推送待网络恢复后从 `/home/dev/projects/preview-proj-desktop-edition` 执行 `git push -u origin desktop-edition`。详见 `logs/desktop_edition_branch_20260719.md`。
+
+- 2026-07-19 Asia/Shanghai: `MAINTENANCE-REPO-01` 完成。用户要求在项目测试运行期间仅进行文件整理。已先通过在线 Desktop backend/Hermes 容器挂载确认，当前有效运行目录仅为 `deploy/desktop/runtime/`，因此未移动、未修改、未重启该目录及服务。根目录历史 `data/`、UUID 任务成果、调试日志、旧 Desktop/Server smoke runtime、路演/PPT/竞赛材料、PPT 生成脚本和历史生成包均已转入忽略 Git 与 Docker 的 `archive/`；需求、方案、运维/安装手册、开发经验和非运行原型按用途转入 `docs/`，当前运行入口 `环评前期研判AI助手.html` 保持根目录原位。`outputs/` 仅保留实施/验收/沙箱设计文档，`logs/` 仅保留持久工程记录。归档边界和清单见 `logs/repository_cleanup_20260719.md`。
+
+- 2026-07-19 Asia/Shanghai: `MAINTENANCE-FS-01` 完成。用户在 `HB-PT-000` 结果中看到 `File-mutation verifier` 告警。根因是官方 Hermes 镜像环境变量 `HERMES_WRITE_SAFE_ROOT=/opt/data` 仅允许 `write_file` 写入 Controller 自身状态目录，而后端提示词要求 Agent 把节点成果写入单独挂载的 `/eia/outputs/<task_id>`；目录物理权限正常，但被 Hermes 路径安全校验拒绝。共享 Desktop/Server Compose 现将白名单限制性扩展为 `/opt/data:/eia/outputs`，没有开放项目资料或其他宿主路径；启动钩子同时将 Desktop local terminal 使用的 `/workspace` 赋予 Hermes 运行 UID/GID，修复过程文件 `mkdir` 的 Permission denied。服务已重建，进程实际白名单正确；真实 Agent `write_file` run `run_3117787a05054fc8bf519296b48448e2` 成功写入隔离诊断成果并返回 `DONE`，新日志无写入/权限告警。历史节点结果未自动改写，需从 `HB-PT-000` 重跑才会替换页面中的旧提示。详见 `logs/hermes_write_safe_root_20260719.md`。
 
 - 2026-07-19 Asia/Shanghai: `MAINTENANCE-LLM-02` 完成。按用户要求，模型配置收敛为唯一的 OpenAI-compatible 三字段：`OPENAI_API_KEY`、`OPENAI_BASE_URL`、`OPENAI_MODEL`。共享 Hermes 启动钩子、Desktop/Server Compose、Linux/Windows 启动校验、示例 `.env` 和交付文档均移除了 `LLM_PROVIDER`、`LLM_MODEL`、`LLM_BASE_URL`、`CUSTOM_BASE_URL`、`DEEPSEEK_API_KEY` 的模型配置路径；其余 Hermes 资源限制、超时与联网检索 Key 仍为独立的运维配置。实际 Desktop Hermes 进程和生成 `.env` 仅含三个 `OPENAI_*` 模型变量，生成配置为 `custom:eia-managed`、`https://api.aiboys.xyz/v1`；真实 Agent run `run_7c2ed2c4eb024c658752aa141cb10ff3` 已 `completed`，输出 `OK`。用户当前只需在 `deploy/desktop/.env` 填写这三个字段；服务已重建并健康。实现提交 `8570440` 已推送至 `main`。
 

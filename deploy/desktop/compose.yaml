@@ -13,6 +13,7 @@ services:
       HERMES_GID: ${HOST_GID:-1000}
       HERMES_HOME: /opt/data
       HERMES_API_SERVER_KEY: ${HERMES_API_SERVER_KEY:-}
+      HERMES_WRITE_SAFE_ROOT: /opt/data:/eia/outputs
       OPENAI_MODEL: ${OPENAI_MODEL:-}
       OPENAI_API_KEY: ${OPENAI_API_KEY:-}
       OPENAI_BASE_URL: ${OPENAI_BASE_URL:-}

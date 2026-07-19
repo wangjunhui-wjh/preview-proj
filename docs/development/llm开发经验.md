@@ -541,3 +541,25 @@ call_start 后长时间无 call_success / call_error
 ```
 
 在图片缓存桥接完成并用真实扫描件验收前，提示词应允许 Agent 以容器 OCR 作为回退，但不能把 OCR 结果伪称为视觉模型识别结果。该问题与模型 API、PDF 大小或人工审批无关，是 Docker 文件系统边界问题。
+
+## 23. Agent 成果目录必须同时满足挂载、权限和写入白名单
+
+问题表现：
+
+```text
+File-mutation verifier: file(s) were NOT modified
+Write denied: /eia/outputs/... is outside HERMES_WRITE_SAFE_ROOT (/opt/data)
+```
+
+含义：Agent 的 `write_file` 工具被 Hermes 安全校验拒绝，提示词中“已生成成果”的文字不代表文件真的写入成功。即使后端之后从模型最终输出归档出了同名文件，也不能把它当作 Agent 文件写入成功。
+
+部署要求：
+
+```text
+HERMES_WRITE_SAFE_ROOT=/opt/data:/eia/outputs
+/eia/outputs                 挂载为读写
+/workspace                   对 Hermes 运行用户可写
+/eia/workspaces              保持只读
+```
+
+不要直接移除 `HERMES_WRITE_SAFE_ROOT`。只加入业务需要的成果目录；项目资料、容器系统目录和凭据目录仍必须保持不可写。修复后应用重建，并用一次真实 `write_file` Agent run 验证成果文件存在、内容正确和日志无 `Write denied`。

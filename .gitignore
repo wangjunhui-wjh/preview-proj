@@ -27,7 +27,10 @@ logs/*
 !logs/dual_edition_*.md
 !logs/hermes_docker_terminal_*.md
 !logs/hermes_custom_provider_*.md
+!logs/hermes_write_safe_root_*.md
 !logs/prep_ingest_502_*.md
+!logs/repository_cleanup_*.md
+!logs/desktop_edition_branch_*.md
 
 # Generated outputs. Keep durable design/implementation Markdown documents.
 outputs/*
@@ -35,6 +38,10 @@ outputs/*
 !outputs/双版本系统实施计划与验收标准.md
 !outputs/双版本系统验收记录.md
 !outputs/Hermes服务模式沙箱调研与改造建议.md
+
+# Local historical materials. Only the archive index is versioned.
+archive/*
+!archive/README.md
 
 # Recovery state: keep only shared implementation state, not PIDs/sessions.
 .state/*

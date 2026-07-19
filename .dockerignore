@@ -17,3 +17,4 @@ backups
 *.tar.gz
 *.tgz
 node_modules
+archive

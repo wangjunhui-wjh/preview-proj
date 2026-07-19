@@ -112,6 +112,7 @@ services:
       HERMES_UID: ${HOST_UID:?HOST_UID is set by scripts/start.sh}
       HERMES_GID: ${HOST_GID:?HOST_GID is set by scripts/start.sh}
       HERMES_API_SERVER_KEY: ${HERMES_API_SERVER_KEY:?set HERMES_API_SERVER_KEY in deploy/server/.env}
+      HERMES_WRITE_SAFE_ROOT: /opt/data:/eia/outputs
       OPENAI_MODEL: ${OPENAI_MODEL:-}
       OPENAI_API_KEY: ${OPENAI_API_KEY:-}
       OPENAI_BASE_URL: ${OPENAI_BASE_URL:-}

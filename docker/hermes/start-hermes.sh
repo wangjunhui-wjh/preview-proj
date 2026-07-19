@@ -50,7 +50,9 @@ case "$terminal_backend" in
     ;;
 esac
 
-mkdir -p "$hermes_home"
+mkdir -p "$hermes_home" /workspace
+chown "${HERMES_UID:-1000}:${HERMES_GID:-1000}" /workspace
+chmod 775 /workspace
 
 env_tmp="$hermes_home/.env.eia-tmp"
 umask 077
