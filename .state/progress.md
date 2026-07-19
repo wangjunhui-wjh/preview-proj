@@ -12,9 +12,9 @@
 
 ## Current State
 
-- current_step: `MAINTENANCE-CTX-01`
-- next_step: `DIAGNOSE_AND_GATE_INCOMPLETE_NODE_OUTPUTS`
-- status: `native_context_compression_hardened`
+- current_step: `MAINTENANCE-UPSTREAM-503-01`
+- next_step: `RETRY_OR_RECONFIGURE_UPSTREAM_MODEL_AFTER_USER_CONFIRMATION`
+- status: `upstream_model_503_diagnosed`
 - last_updated: `2026-07-19 Asia/Shanghai`
 - target_route: `Hermes Agent + LangGraph + uploaded HTML prototype`
 - active_agents: `Desktop Compose Hermes API Server eia-desktop-hermes-1, provider:custom:eia-managed, model:grok-4.5, terminal:local in Controller container`; `Desktop Compose backend eia-desktop-backend-1 on http://127.0.0.1:8501`
@@ -103,6 +103,8 @@
 - 历史运行日志与报告产物，仅保留 `.gitkeep`
 
 ## Change Log
+
+- 2026-07-19 Asia/Shanghai: `MAINTENANCE-UPSTREAM-503-01` 完成。用户报告前端 `HTTP 503: Service temporarily unavailable`；只读诊断确认 backend/Hermes health 正常，错误来自 Hermes 的 custom OpenAI-compatible 上游 `https://api.aiboys.xyz/v1`。新任务 `3e66d0a2-9e8b-42f1-b02d-6401a85a8bb0` 在 FILE-VALIDATION、PREP-INGEST、WEB-SEARCH 各次调用中均以约 6.5k token、2 条消息启动，Hermes 自动三次退避重试后仍收到上游 503，因此不是 PDF、上下文压缩或本地服务问题。重建 Controller 后，启动钩子重新读取当前 `deploy/desktop/.env`，实际模型从旧容器的 `grok-4.5` 变为 `gpt-5.5`；本次没有改模型配置，只是使既有 `.env` 生效。未自动切换模型、未自动重试任务，等待用户选择等待/重试当前上游或改回已验证模型。详见 `logs/upstream_model_503_20260719.md`。
 
 - 2026-07-19 Asia/Shanghai: `MAINTENANCE-CTX-01` 完成。用户要求先允许 Agent 进行上下文压缩；诊断确认 Hermes 原配置实际已启用 `compression.enabled: true`，因此没有重复造压缩器。共享 Hermes 启动钩子现显式声明原生 `context.engine: compressor`、`compression.in_place: true` 与 `compression.abort_on_summary_failure: true`：压缩不再轮换 session id，压缩摘要失败时停止节点而非静默以截断上下文继续。仅重建了已暂停任务环境中的 Desktop Hermes Controller，backend 未重建、`deploy/desktop/runtime/` 未移动；Hermes healthy、`/api/ready` 已验证。单机版极简分支已同步同一配置（本地提交 `5b2b029`）。此项不替代短过程句成果门禁：任务 `90510bf2-b7b7-4956-857b-a0a3a6b8566b` 的 `HB-PT-002/005/006/007/008/009` 已证实未写完整成果却被推进，后续需从 `DIAGNOSE_AND_GATE_INCOMPLETE_NODE_OUTPUTS` 实施“缺少完整成果文件/结构化结果即失败停止”修复。详见 `logs/hermes_context_compression_20260719.md`。
 
