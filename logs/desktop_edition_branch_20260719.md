@@ -27,3 +27,5 @@
 ## 推送状态
 
 2026-07-19 两次使用 SSH-over-443 推送均在 GitHub 密钥交换阶段被本地网络关闭（`Connection closed by 198.18.0.20 port 443`）。本地分支和提交已完整存在；网络恢复后在隔离 worktree 运行 `git push -u origin desktop-edition` 即可推送。随后 `main` 的 SSH fetch 也在同一阶段失败，HTTPS 在当前环境无 Git 凭据时返回 403，进一步确认浏览器登录状态未传递给此环境的 Git CLI。
+
+2026-07-19：Hermes 原生上下文压缩加固已同步至此分支，本地提交为 `5b2b029 fix: harden Hermes native context compression`；仅涉及 `docker/hermes/start-hermes.sh` 与 `deploy/desktop/README.md`，未引入运行数据或其他交付外文件。
