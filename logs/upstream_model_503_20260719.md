@@ -13,8 +13,8 @@
 
 ## 配置变化说明
 
-重建 Hermes 前，旧容器运行配置为 `grok-4.5`；重建后启动钩子按当前 `deploy/desktop/.env` 重新加载，实际模型变为 `gpt-5.5`。本次变更没有修改模型 Key、上游 URL 或模型名；重建使此前未生效的本地 `.env` 配置生效。
+`deploy/desktop/.env` 始终配置为 `grok-4.5`。诊断期间曾直接调用 `docker compose` 重建 Hermes，绕过了 `deploy/desktop/lib.sh` 的环境隔离包装器；宿主 Shell 导出的 `OPENAI_MODEL=gpt-5.5` 与无 `/v1` URL 因 Compose 变量优先级覆盖了 `.env`，导致该临时容器使用错误模型。随后已通过项目包装器仅重建 Hermes，容器实际恢复为 `grok-4.5` 与正确 `/v1` URL，最小真实 Agent 调用成功。503 的直接原因是这次错误的 Shell 环境覆盖，而不是 `.env` 内容变化。
 
 ## 处理边界
 
-未自动切换模型、未改写 `.env`、未自动重试失败任务。后续应由用户确认：等待当前上游 `gpt-5.5` 服务恢复后重试，或将 `OPENAI_MODEL` 改回已验证可用的模型后重建 Hermes。
+未改写 `.env`。失败任务保留原错误记录；恢复 Grok 后的新 Agent 调用已正常运行。
