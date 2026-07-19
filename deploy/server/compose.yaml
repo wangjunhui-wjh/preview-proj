@@ -1,0 +1,190 @@
+services:
+  caddy:
+    image: ${CADDY_IMAGE:-caddy:2-alpine@sha256:5f5c8640aae01df9654968d946d8f1a56c497f1dd5c5cda4cf95ab7c14d58648}
+    restart: unless-stopped
+    depends_on:
+      backend:
+        condition: service_healthy
+    environment:
+      SERVER_NAME: ${SERVER_NAME:?set SERVER_NAME in deploy/server/.env}
+      TLS_ISSUER: ${TLS_ISSUER:-internal}
+      BASIC_AUTH_USER: ${BASIC_AUTH_USER:?set BASIC_AUTH_USER in deploy/server/.env}
+      BASIC_AUTH_HASH: ${BASIC_AUTH_HASH:?set BASIC_AUTH_HASH in deploy/server/.env}
+    ports:
+      - "${BIND_ADDRESS:-0.0.0.0}:${HTTP_PORT:-80}:80"
+      - "${BIND_ADDRESS:-0.0.0.0}:${HTTPS_PORT:-443}:443"
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - ${RUNTIME_ROOT:?RUNTIME_ROOT must be absolute}/caddy/data:/data
+      - ${RUNTIME_ROOT:?RUNTIME_ROOT must be absolute}/caddy/config:/config
+    networks:
+      - edge
+    read_only: true
+    tmpfs:
+      - /tmp:rw,noexec,nosuid,size=64m
+    security_opt:
+      - no-new-privileges:true
+    cpus: ${CADDY_CPUS:-0.50}
+    mem_limit: ${CADDY_MEMORY:-256m}
+    pids_limit: ${CADDY_PIDS_LIMIT:-128}
+    healthcheck:
+      test: ["CMD-SHELL", "caddy version >/dev/null || exit 1"]
+      interval: 30s
+      timeout: 5s
+      start_period: 10s
+      retries: 5
+
+  backend:
+    build:
+      context: ../..
+      dockerfile: Dockerfile.backend
+      args:
+        PIP_INDEX_URL: ${PIP_INDEX_URL:-https://pypi.tuna.tsinghua.edu.cn/simple}
+        REQUIREMENTS_FILE: ${REQUIREMENTS_FILE:-requirements.lock}
+    image: ${BACKEND_IMAGE:-eia-ai-backend:0.2.0}
+    restart: unless-stopped
+    depends_on:
+      hermes:
+        condition: service_healthy
+    init: true
+    user: "${HOST_UID:?HOST_UID is set by scripts/start.sh}:${HOST_GID:?HOST_GID is set by scripts/start.sh}"
+    environment:
+      EIA_DEPLOYMENT_EDITION: server
+      EIA_AUTO_RECOVER_RUNNING_TASKS: "true"
+      HERMES_BASE_URL: http://hermes:8642
+      HERMES_API_KEY: ${HERMES_API_SERVER_KEY:?set HERMES_API_SERVER_KEY in deploy/server/.env}
+      HERMES_MODEL: hermes-agent
+      HERMES_REQUEST_TIMEOUT: ${HERMES_REQUEST_TIMEOUT:-3600}
+      UPLOAD_DIR: /app/data/uploads
+      LANGGRAPH_CHECKPOINT_DIR: /app/data/tasks
+      LANGGRAPH_CHECKPOINT_DB: /app/data/langgraph_checkpoints.sqlite
+      TASK_WORKSPACE_DIR: /app/data/workspaces
+      VISION_CACHE_DIR: /app/data/vision-cache
+      KNOWLEDGE_DIR: /app/data/knowledge
+      DATABASE_URL: sqlite:////app/data/app.db
+      OUTPUT_DIR: /app/outputs
+      LOG_DIR: /app/logs
+      AGENT_WORKSPACE_ROOT: /eia/workspaces
+      AGENT_OUTPUT_ROOT: /eia/outputs
+      AGENT_VISION_CACHE_ROOT: /eia/vision-cache
+      HERMES_CONTROLLER_VISION_ROOT: /eia/vision-cache
+    expose:
+      - "8501"
+    volumes:
+      - ${RUNTIME_ROOT}/data:/app/data
+      - ${RUNTIME_ROOT}/outputs:/app/outputs
+      - ${RUNTIME_ROOT}/logs:/app/logs
+      - ${RUNTIME_ROOT}/state:/app/.state
+    networks:
+      - edge
+      - control
+    read_only: true
+    tmpfs:
+      - /tmp:rw,noexec,nosuid,size=256m
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+    cpus: ${BACKEND_CPUS:-2.0}
+    mem_limit: ${BACKEND_MEMORY:-2g}
+    pids_limit: ${BACKEND_PIDS_LIMIT:-256}
+    stop_grace_period: 60s
+    healthcheck:
+      test: ["CMD-SHELL", "python -c \"import urllib.request; urllib.request.urlopen('http://127.0.0.1:8501/api/ready', timeout=8).read()\" || exit 1"]
+      interval: 30s
+      timeout: 10s
+      start_period: 45s
+      retries: 10
+
+  hermes:
+    build:
+      context: ../..
+      dockerfile: Dockerfile.hermes
+      args:
+        PIP_INDEX_URL: ${PIP_INDEX_URL:-https://pypi.tuna.tsinghua.edu.cn/simple}
+    image: ${HERMES_IMAGE:-eia-ai-hermes-controller:0.2.0}
+    restart: unless-stopped
+    command: ["gateway", "run"]
+    environment:
+      # The same absolute host path is mounted at the same path inside the
+      # Controller. Hermes then gives the host Docker daemon valid bind paths.
+      HERMES_HOME: ${RUNTIME_ROOT}/hermes
+      HERMES_UID: ${HOST_UID:?HOST_UID is set by scripts/start.sh}
+      HERMES_GID: ${HOST_GID:?HOST_GID is set by scripts/start.sh}
+      HERMES_API_SERVER_KEY: ${HERMES_API_SERVER_KEY:?set HERMES_API_SERVER_KEY in deploy/server/.env}
+      LLM_PROVIDER: ${LLM_PROVIDER:-custom}
+      LLM_MODEL: ${LLM_MODEL:-}
+      LLM_BASE_URL: ${LLM_BASE_URL:-}
+      OPENAI_MODEL: ${OPENAI_MODEL:-}
+      OPENAI_API_KEY: ${OPENAI_API_KEY:-}
+      OPENAI_BASE_URL: ${OPENAI_BASE_URL:-}
+      CUSTOM_BASE_URL: ${CUSTOM_BASE_URL:-}
+      DEEPSEEK_API_KEY: ${DEEPSEEK_API_KEY:-}
+      HERMES_REASONING_EFFORT: ${HERMES_REASONING_EFFORT:-xhigh}
+      HERMES_MAX_TURNS: ${HERMES_MAX_TURNS:-60}
+      HERMES_MAX_CONCURRENT_RUNS: ${HERMES_MAX_CONCURRENT_RUNS:-4}
+      HERMES_TERMINAL_BACKEND: docker
+      HERMES_TERMINAL_CWD: /workspace
+      HERMES_TERMINAL_TIMEOUT: ${HERMES_TERMINAL_TIMEOUT:-900}
+      HERMES_DOCKER_IMAGE: ${HERMES_TOOL_IMAGE:-eia-ai-hermes-tools:0.2.0}
+      HERMES_DOCKER_WORKSPACES_HOST: ${RUNTIME_ROOT}/data/workspaces
+      HERMES_DOCKER_OUTPUTS_HOST: ${RUNTIME_ROOT}/outputs
+      HERMES_DOCKER_VISION_HOST: ${RUNTIME_ROOT}/data/vision-cache
+      HERMES_DOCKER_CPU: ${HERMES_TOOL_CPUS:-2}
+      HERMES_DOCKER_MEMORY_MB: ${HERMES_TOOL_MEMORY_MB:-4096}
+      HERMES_DOCKER_DISK_MB: ${HERMES_TOOL_DISK_MB:-20480}
+      HERMES_WEB_BACKEND: ${HERMES_WEB_BACKEND:-ddgs}
+      HERMES_WEB_SEARCH_BACKEND: ${HERMES_WEB_SEARCH_BACKEND:-ddgs}
+      FIRECRAWL_API_KEY: ${FIRECRAWL_API_KEY:-}
+      TAVILY_API_KEY: ${TAVILY_API_KEY:-}
+      EXA_API_KEY: ${EXA_API_KEY:-}
+      PARALLEL_API_KEY: ${PARALLEL_API_KEY:-}
+    expose:
+      - "8642"
+    volumes:
+      - ${RUNTIME_ROOT}/hermes:/opt/data
+      - ${RUNTIME_ROOT}/hermes:${RUNTIME_ROOT}/hermes
+      - ${RUNTIME_ROOT}/data/vision-cache:/eia/vision-cache
+      - ${DOCKER_SOCKET:-/var/run/docker.sock}:/var/run/docker.sock
+    networks:
+      - control
+      - agent_egress
+    security_opt:
+      - no-new-privileges:true
+    cpus: ${HERMES_CPUS:-2.0}
+    mem_limit: ${HERMES_MEMORY:-4g}
+    pids_limit: ${HERMES_PIDS_LIMIT:-512}
+    stop_grace_period: 120s
+    healthcheck:
+      test: ["CMD-SHELL", "curl -fsS http://127.0.0.1:8642/health >/dev/null || exit 1"]
+      interval: 30s
+      timeout: 10s
+      start_period: 90s
+      retries: 10
+
+  backup:
+    image: ${BACKUP_IMAGE:-alpine:3.21@sha256:48b0309ca019d89d40f670aa1bc06e426dc0931948452e8491e3d65087abc07d}
+    profiles: ["tools"]
+    restart: "no"
+    network_mode: none
+    environment:
+      BACKUP_FILE: ${BACKUP_FILE:-eia-server-backup.tgz}
+      BACKUP_OWNER: "${HOST_UID:?HOST_UID is set by scripts/start.sh}:${HOST_GID:?HOST_GID is set by scripts/start.sh}"
+    entrypoint: ["/bin/sh", "-eu", "-c"]
+    command:
+      - >-
+        tar --exclude='./hermes/.env' --exclude='./hermes/auth.json'
+        -czf "/backups/$${BACKUP_FILE}" -C /runtime .
+        && chown "$${BACKUP_OWNER}" "/backups/$${BACKUP_FILE}"
+    volumes:
+      - ${RUNTIME_ROOT}:/runtime:ro
+      - ${BACKUP_ROOT:?BACKUP_ROOT is set by scripts/start.sh}:/backups
+
+networks:
+  edge:
+    driver: bridge
+  control:
+    driver: bridge
+    internal: true
+  agent_egress:
+    driver: bridge

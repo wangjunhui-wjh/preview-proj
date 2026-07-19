@@ -13,7 +13,7 @@ from io import BytesIO
 from zipfile import ZIP_DEFLATED, ZipFile
 from fastapi import Body, FastAPI, File, Form, HTTPException, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import FileResponse, Response, StreamingResponse
+from fastapi.responses import FileResponse, JSONResponse, Response, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 
 from .config import settings
@@ -1349,11 +1349,29 @@ async def health() -> dict[str, Any]:
     except Exception as exc:  # noqa: BLE001
         hermes = {"status": "error", "error": str(exc)}
     return {
-        "status": "ok",
+        "status": "ok" if hermes.get("status") != "error" else "degraded",
         "edition": settings.deployment_edition,
         "hermes": hermes,
         "auto_recovery": settings.auto_recover_running_tasks,
     }
+
+
+@app.get("/api/ready")
+async def readiness() -> Response:
+    try:
+        hermes = await hermes_client.health()
+    except Exception as exc:  # noqa: BLE001
+        return JSONResponse(
+            status_code=503,
+            content={
+                "status": "not_ready",
+                "edition": settings.deployment_edition,
+                "hermes": {"status": "error", "error": str(exc)},
+            },
+        )
+    return JSONResponse(
+        content={"status": "ready", "edition": settings.deployment_edition, "hermes": hermes}
+    )
 
 
 @app.get("/api/hermes/health")

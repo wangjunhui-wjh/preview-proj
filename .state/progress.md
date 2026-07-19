@@ -12,9 +12,9 @@
 
 ## Current State
 
-- current_step: `DUAL-02`
-- next_step: `DUAL-03_desktop_edition`
-- status: `shared_runtime_hardening_complete_desktop_edition_in_progress`
+- current_step: `DUAL-07`
+- next_step: `MAINTENANCE_or_next_release`
+- status: `dual_edition_delivery_complete`
 - last_updated: `2026-07-19 Asia/Shanghai`
 - target_route: `Hermes Agent + LangGraph + uploaded HTML prototype`
 - active_agents: `Hermes API Server running in tmux session hermes-eia, provider:custom, model:grok-4.5, terminal:docker`; `Docker backend container eia-ai-backend on http://127.0.0.1:8501`
@@ -103,6 +103,10 @@
 - 历史运行日志与报告产物，仅保留 `.gitkeep`
 
 ## Change Log
+
+- 2026-07-19 Asia/Shanghai: `DUAL-05` 至 `DUAL-07` 完成。Python、Hermes、Caddy、备份 Alpine 镜像均固定到已验证 digest；根目录旧的“宿主 Hermes + 后端容器”Compose 入口已移除，快捷脚本统一转发新单机版，服务器版仅从 `deploy/server/` 启动。新增 `deploy/images.manifest`、离线镜像导入/导出脚本和双版本交付入口文档；已实生成并校验忽略 Git 的离线镜像包 `deploy/image-bundles/eia-ai-images-0.2.0.tar`（约 1.8 GB）。桌面版和服务器版完整 Compose 烟测均再次通过；服务器版未认证为 401、认证反代 `/api/ready` 成功，backend/Hermes 无主机端口。两版本备份都实测排除 Hermes `.env`/`auth.json` 且将归档文件归还给部署 UID/GID。最终验收记录见 `outputs/双版本系统验收记录.md`；后续从 `MAINTENANCE_or_next_release` 继续。
+
+- 2026-07-19 Asia/Shanghai: `DUAL-03`、`DUAL-04` 完成。单机版新增 `deploy/desktop/`，全容器运行 backend 和 Hermes local terminal，端口严格绑定 `127.0.0.1`，支持 Linux/macOS/Windows 启停、日志、无密钥备份；完整 Compose smoke 通过，backend/Hermes 健康且 Hermes 非 root 用户可访问持久工作目录。服务器版新增 `deploy/server/`，由 Caddy 提供 HTTPS/Basic Auth，backend 与 Hermes 不发布主机端口；Hermes Controller 使用官方 s6 基础镜像衍生运行时和原生 Docker terminal，Controller 与 Docker daemon 使用同一绝对 host path，工具容器无 Docker socket/模型密钥且项目输入只读。完整服务器 Compose smoke 通过：未认证 401、认证反代 `/api/ready` 成功、Docker socket 权限和工具容器隔离均已实测。临时 smoke 栈均已停止。下一步执行 `DUAL-05` 运维、安全与离线交付硬化。
 
 - 2026-07-19 Asia/Shanghai: `DUAL-02` 完成。后端新增部署版本、CORS、Agent/输出/视觉缓存路径和启动孤立任务恢复配置；启动时会把遗留 `running` 任务安全恢复为 `paused`。视觉提示词已建立沙箱路径与 Hermes Controller 可见路径的受控交接。后端依赖锁定，文档工具镜像改为不夹带业务代码的独立镜像 `eia-ai-hermes-tools:0.2.0`，实建后通过 PDF/Office/OCR/Node/FFmpeg/Python 文档栈与隔离检查。Python、前端 JavaScript、Shell、Dockerfile 和孤立任务恢复 smoke 均通过。Git 远端按用户最新要求切换为全新仓库 `wangjunhui-wjh/preview-proj`，旧仓库不再使用。下一步实施 `DUAL-03` 单机版。
 

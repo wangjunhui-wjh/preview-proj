@@ -1,25 +1,79 @@
-#!/usr/bin/env sh
+#!/command/with-contenv sh
 set -eu
 
 yaml_quote() {
-  printf "'%s'" "$(printf "%s" "$1" | sed "s/'/''/g")"
+  printf "'%s'" "$(printf '%s' "$1" | sed "s/'/''/g")"
 }
 
-mkdir -p /opt/data /app/data /app/logs /app/outputs
+require_value() {
+  name="$1"
+  eval "value=\${$name:-}"
+  if [ -z "$value" ]; then
+    echo "[eia-config] ERROR: $name is required" >&2
+    exit 1
+  fi
+}
 
+hermes_home="${HERMES_HOME:-/opt/data}"
 api_key="${HERMES_API_SERVER_KEY:-${API_SERVER_KEY:-}}"
-if [ -z "$api_key" ]; then
-  api_key="change-me"
+provider="${LLM_PROVIDER:-custom}"
+model="${LLM_MODEL:-${OPENAI_MODEL:-}}"
+base_url="${LLM_BASE_URL:-}"
+terminal_backend="${HERMES_TERMINAL_BACKEND:-local}"
+
+terminal_cwd="${HERMES_TERMINAL_CWD:-}"
+if [ -z "$terminal_cwd" ]; then
+  if [ "$terminal_backend" = "local" ]; then
+    terminal_cwd="$hermes_home/workspace"
+  else
+    terminal_cwd="/workspace"
+  fi
 fi
 
-provider="${LLM_PROVIDER:-custom}"
-model="${LLM_MODEL:-${OPENAI_MODEL:-gpt-5.5}}"
-base_url="${LLM_BASE_URL:-}"
 if [ -z "$base_url" ] && [ "$provider" = "custom" ]; then
   base_url="${OPENAI_BASE_URL:-${CUSTOM_BASE_URL:-}}"
 fi
 
-cat > /opt/data/.env <<EOF
+if [ "${#api_key}" -lt 16 ]; then
+  echo "[eia-config] ERROR: HERMES_API_SERVER_KEY must contain at least 16 characters" >&2
+  exit 1
+fi
+if [ -z "$model" ]; then
+  echo "[eia-config] ERROR: LLM_MODEL is required" >&2
+  exit 1
+fi
+case "$provider" in
+  custom)
+    require_value OPENAI_API_KEY
+    if [ -z "$base_url" ]; then
+      echo "[eia-config] ERROR: OPENAI_BASE_URL or LLM_BASE_URL is required for custom provider" >&2
+      exit 1
+    fi
+    ;;
+  deepseek)
+    require_value DEEPSEEK_API_KEY
+    ;;
+  openai)
+    require_value OPENAI_API_KEY
+    ;;
+  *)
+    echo "[eia-config] ERROR: unsupported LLM_PROVIDER '$provider' (use custom, deepseek or openai)" >&2
+    exit 1
+    ;;
+esac
+case "$terminal_backend" in
+  local|docker) ;;
+  *)
+    echo "[eia-config] ERROR: HERMES_TERMINAL_BACKEND must be local or docker" >&2
+    exit 1
+    ;;
+esac
+
+mkdir -p "$hermes_home"
+
+env_tmp="$hermes_home/.env.eia-tmp"
+umask 077
+cat > "$env_tmp" <<EOF
 API_SERVER_ENABLED=true
 API_SERVER_HOST=0.0.0.0
 API_SERVER_PORT=8642
@@ -27,22 +81,26 @@ API_SERVER_MODEL_NAME=hermes-agent
 API_SERVER_KEY=${api_key}
 OPENAI_API_KEY=${OPENAI_API_KEY:-}
 OPENAI_BASE_URL=${OPENAI_BASE_URL:-}
-CUSTOM_BASE_URL=${OPENAI_BASE_URL:-${CUSTOM_BASE_URL:-}}
+CUSTOM_BASE_URL=${CUSTOM_BASE_URL:-${OPENAI_BASE_URL:-}}
 DEEPSEEK_API_KEY=${DEEPSEEK_API_KEY:-}
 FIRECRAWL_API_KEY=${FIRECRAWL_API_KEY:-}
 TAVILY_API_KEY=${TAVILY_API_KEY:-}
 EXA_API_KEY=${EXA_API_KEY:-}
 PARALLEL_API_KEY=${PARALLEL_API_KEY:-}
 EOF
-chmod 600 /opt/data/.env || true
+mv "$env_tmp" "$hermes_home/.env"
+chmod 600 "$hermes_home/.env"
 
 q_provider="$(yaml_quote "$provider")"
 q_model="$(yaml_quote "$model")"
 q_base_url="$(yaml_quote "$base_url")"
 q_web_backend="$(yaml_quote "${HERMES_WEB_BACKEND:-ddgs}")"
 q_web_search_backend="$(yaml_quote "${HERMES_WEB_SEARCH_BACKEND:-ddgs}")"
+q_terminal_backend="$(yaml_quote "$terminal_backend")"
+q_terminal_cwd="$(yaml_quote "$terminal_cwd")"
 
-cat > /opt/data/config.yaml <<EOF
+config_tmp="$hermes_home/config.yaml.eia-tmp"
+cat > "$config_tmp" <<EOF
 model:
   default: ${q_model}
   provider: ${q_provider}
@@ -52,9 +110,41 @@ agent:
   verbose: false
   reasoning_effort: ${HERMES_REASONING_EFFORT:-xhigh}
 terminal:
-  backend: local
-  cwd: /app
-  timeout: ${HERMES_TERMINAL_TIMEOUT:-180}
+  backend: ${q_terminal_backend}
+  cwd: ${q_terminal_cwd}
+  timeout: ${HERMES_TERMINAL_TIMEOUT:-900}
+  home_mode: auto
+EOF
+
+if [ "$terminal_backend" = "docker" ]; then
+  require_value HERMES_DOCKER_WORKSPACES_HOST
+  require_value HERMES_DOCKER_OUTPUTS_HOST
+  require_value HERMES_DOCKER_VISION_HOST
+  cat >> "$config_tmp" <<EOF
+  docker_image: $(yaml_quote "${HERMES_DOCKER_IMAGE:-eia-ai-hermes-tools:0.2.0}")
+  docker_volumes:
+    - $(yaml_quote "${HERMES_DOCKER_WORKSPACES_HOST}:/eia/workspaces:ro")
+    - $(yaml_quote "${HERMES_DOCKER_OUTPUTS_HOST}:/eia/outputs")
+    - $(yaml_quote "${HERMES_DOCKER_VISION_HOST}:/eia/vision-cache")
+  docker_forward_env: []
+  docker_env: {}
+  docker_extra_args: []
+  docker_run_as_host_user: true
+  docker_persist_across_processes: false
+  docker_orphan_reaper: true
+  docker_mount_cwd_to_workspace: false
+  container_persistent: false
+  container_cpu: ${HERMES_DOCKER_CPU:-2}
+  container_memory: ${HERMES_DOCKER_MEMORY_MB:-4096}
+  container_disk: ${HERMES_DOCKER_DISK_MB:-20480}
+EOF
+fi
+
+cat >> "$config_tmp" <<EOF
+approvals:
+  mode: off
+  timeout: 60
+  cron_mode: deny
 web:
   backend: ${q_web_backend}
   search_backend: ${q_web_search_backend}
@@ -62,7 +152,7 @@ browser:
   inactivity_timeout: 120
 tool_loop_guardrails:
   warnings_enabled: true
-  hard_stop_enabled: false
+  hard_stop_enabled: true
   warn_after:
     exact_failure: 2
     same_tool_failure: 3
@@ -79,8 +169,26 @@ compression:
   protect_first_n: 3
 prompt_caching:
   cache_ttl: 5m
+gateway:
+  api_server:
+    max_concurrent_runs: ${HERMES_MAX_CONCURRENT_RUNS:-4}
+platform_toolsets:
+  api_server:
+    - browser
+    - code_execution
+    - delegation
+    - file
+    - memory
+    - session_search
+    - skills
+    - terminal
+    - todo
+    - vision
+    - web
+_config_version: 33
 EOF
 
-hermes tools enable --platform api_server web file terminal skills >/dev/null 2>&1 || true
+mv "$config_tmp" "$hermes_home/config.yaml"
+chmod 640 "$hermes_home/config.yaml"
 
-exec hermes gateway run --replace -v
+echo "[eia-config] Hermes configured: provider=$provider model=$model terminal=$terminal_backend"

@@ -1,0 +1,6 @@
+# image|role|source/build instruction
+eia-ai-backend:0.2.0|FastAPI and LangGraph application|Dockerfile.backend
+eia-ai-hermes-controller:0.2.0|Hermes Controller with document dependencies|Dockerfile.hermes
+eia-ai-hermes-tools:0.2.0|Hermes native Docker-terminal document sandbox|Dockerfile.hermes-tools
+caddy:2-alpine@sha256:5f5c8640aae01df9654968d946d8f1a56c497f1dd5c5cda4cf95ab7c14d58648|Server TLS and reverse proxy|Pinned public image
+alpine:3.21@sha256:48b0309ca019d89d40f670aa1bc06e426dc0931948452e8491e3d65087abc07d|Offline backup helper|Pinned public image

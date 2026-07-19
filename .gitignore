@@ -31,6 +31,7 @@ logs/*
 outputs/*
 !outputs/.gitkeep
 !outputs/双版本系统实施计划与验收标准.md
+!outputs/双版本系统验收记录.md
 !outputs/Hermes服务模式沙箱调研与改造建议.md
 
 # Recovery state: keep only shared implementation state, not PIDs/sessions.
@@ -43,6 +44,7 @@ outputs/*
 *.tar
 *.tar.gz
 *.tgz
+deploy/image-bundles/
 
 # Presentation and contest working materials are not application source.
 *.pptx

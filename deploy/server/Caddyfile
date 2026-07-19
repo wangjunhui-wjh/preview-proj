@@ -1,0 +1,36 @@
+{
+	admin off
+	servers {
+		protocols h1 h2
+	}
+}
+
+http://{$SERVER_NAME} {
+	redir https://{$SERVER_NAME}{uri} permanent
+}
+
+https://{$SERVER_NAME} {
+	tls {$TLS_ISSUER}
+	encode zstd gzip
+
+	basic_auth {
+		{$BASIC_AUTH_USER} {$BASIC_AUTH_HASH}
+	}
+
+	header {
+		-Server
+		Strict-Transport-Security "max-age=31536000"
+		X-Content-Type-Options "nosniff"
+		X-Frame-Options "DENY"
+		Referrer-Policy "same-origin"
+	}
+
+	reverse_proxy backend:8501 {
+		flush_interval -1
+	}
+
+	log {
+		output stdout
+		format json
+	}
+}

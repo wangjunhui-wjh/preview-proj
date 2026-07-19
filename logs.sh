@@ -1,9 +1,5 @@
-#!/usr/bin/env sh
+#!/bin/sh
 set -eu
-cd "$(dirname "$0")"
 
-if docker compose version >/dev/null 2>&1; then
-  docker compose logs -f --tail=200 "$@"
-else
-  docker-compose logs -f --tail=200 "$@"
-fi
+ROOT_DIR=$(CDPATH= cd "$(dirname "$0")" && pwd)
+exec "$ROOT_DIR/deploy/desktop/logs.sh" "$@"
