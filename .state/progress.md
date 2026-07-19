@@ -13,8 +13,8 @@
 ## Current State
 
 - current_step: `MAINTENANCE-DESKTOP-BRANCH-01`
-- next_step: `PUSH_DESKTOP_EDITION_ON_NETWORK_RECOVERY`
-- status: `desktop_edition_branch_committed_push_pending_network`
+- next_step: `PUSH_MAIN_AND_DESKTOP_EDITION_ON_GIT_CREDENTIAL_OR_NETWORK_RECOVERY`
+- status: `main_and_desktop_edition_committed_push_pending_network`
 - last_updated: `2026-07-19 Asia/Shanghai`
 - target_route: `Hermes Agent + LangGraph + uploaded HTML prototype`
 - active_agents: `Desktop Compose Hermes API Server eia-desktop-hermes-1, provider:custom:eia-managed, model:grok-4.5, terminal:local in Controller container`; `Desktop Compose backend eia-desktop-backend-1 on http://127.0.0.1:8501`
@@ -103,6 +103,8 @@
 - 历史运行日志与报告产物，仅保留 `.gitkeep`
 
 ## Change Log
+
+- 2026-07-19 Asia/Shanghai: `MAINTENANCE-GIT-01` 完成。按用户要求更新当前 `main` 工作区：已提交 `f025018 chore: organize repository and repair agent artifacts`，包含 Hermes 节点成果写入白名单/工作区权限修复、根目录资料归档、文档分层、Docker 构建上下文收敛和维护记录；源码编译、前端 JS 语法、Desktop/Server Compose 静态配置均通过，在线 Desktop API 仍 ready。当前 `main` 比已知 `origin/main` 领先 6 个提交。SSH-over-443 的 fetch/push 均在密钥交换阶段被本地网络关闭；HTTPS 无凭据返回 403，且环境未配置 Git credential helper 或 `gh`。因此保留本地提交，不强推、不覆盖未知远端。网络/凭据恢复后，先 `git fetch origin main`，确认可快进后执行 `git push origin main`，再到 `/home/dev/projects/preview-proj-desktop-edition` 执行 `git push -u origin desktop-edition`。
 
 - 2026-07-19 Asia/Shanghai: `MAINTENANCE-DESKTOP-BRANCH-01` 完成。按用户要求创建仅含单机版交付所需文件的孤立 `desktop-edition` 分支，工作在独立 worktree，未切换当前 `main` 工作区、未触碰运行中的 Desktop 容器或 `deploy/desktop/runtime/`。分支仅提交应用源码、提示词、Desktop Compose/脚本/示例配置、两个实际使用的 Dockerfile、Hermes 启动钩子、依赖清单与当前运行入口 HTML，共 57 个文件；明确排除运行数据、`.env`、归档、PPT、历史输出/日志、测试脚本、Qoder Skill、服务器版和离线镜像。Python 编译、前端 JS 语法和 Compose config 均通过。本地提交为 `dad3bd9`；SSH-over-443 两次推送都在 GitHub 密钥交换阶段被本地网络关闭，因此推送待网络恢复后从 `/home/dev/projects/preview-proj-desktop-edition` 执行 `git push -u origin desktop-edition`。详见 `logs/desktop_edition_branch_20260719.md`。
 
