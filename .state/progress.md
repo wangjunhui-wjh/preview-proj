@@ -12,22 +12,23 @@
 
 ## Current State
 
-- current_step: `RESEARCH-HERMES-TOOLS-CODEX-01`
-- next_step: `SELECT_AND_IMPLEMENT_HERMES_SEARCH_EXTRACT_BACKENDS`
-- status: `hermes_tooling_research_complete_codex_executor_poc_optional`
-- last_updated: `2026-07-19 Asia/Shanghai`
-- target_route: `Hermes Agent + LangGraph + uploaded HTML prototype`
+- current_step: `CX-00_CODEX_REPLACEMENT_PLAN`
+- next_step: `CX-01_CODEX_SDK_ISOLATED_POC`
+- status: `codex_replacement_plan_ready_for_review`
+- last_updated: `2026-07-20 Asia/Shanghai`
+- target_route: `Codex SDK/App Server Agent + LangGraph + uploaded HTML prototype`
 - active_agents: `Desktop Compose Hermes API Server eia-desktop-hermes-1, provider:custom:eia-managed, model:gpt-5.6-terra, terminal:local in Controller container`; `Desktop Compose backend eia-desktop-backend-1 on http://127.0.0.1:8501`
 
-> 当前主任务为双版本交付。恢复时依次读取 `.state/dual_edition_plan.md`、`logs/dual_edition_20260719.md` 和 `outputs/双版本系统实施计划与验收标准.md`，再从当前 `next_step` 继续。
+> 当前主任务为 Codex 完整替换 Hermes。恢复时先读取 `outputs/Codex替换Hermes实施计划与验收标准.md` 和 `logs/codex_replacement_plan_20260720.md`；涉及 Desktop/Server 交付边界时，再读取 `.state/dual_edition_plan.md`、`logs/dual_edition_20260719.md` 和 `outputs/双版本系统实施计划与验收标准.md`，然后从当前 `next_step` 继续。
 
 ## New Technical Route
 
 - 前端：以 `环评前期研判AI助手.html` 为目标原型和交互基准。
 - 外层流程：LangGraph 负责 HB 节点顺序、状态、暂停、恢复、失败停止、checkpoint。
-- 节点执行：Hermes Agent 负责每个节点内部的文档读取、OCR/视觉、网页搜索、工具调用和结果生成。
-- 后端职责：任务管理、文件入库、Hermes 调用封装、事件流转发、结果校验、日志和输出归档。
-- 依据原则：所有政策/知识依据必须来自上传材料、Hermes 实际读取的文件、实际访问的网页 URL 或可追溯工具结果。
+- 节点执行：计划改为官方 `openai-codex` Python SDK 驱动 Codex CLI/App Server，负责每个节点内部的文档读取、OCR/视觉、原生 Web Search、工具调用、上下文压缩、子 Agent 和结果生成。
+- 后端职责：任务管理、文件入库、Codex Agent 调用封装、事件流转发、结果 Schema 校验、日志和输出归档；不重写通用 Agent 循环。
+- 依据原则：所有政策/知识依据必须来自上传材料、Codex 实际读取的文件、真实 Web Search/网页 URL 或可追溯工具结果。
+- 切换原则：先完成 CX-01 至 CX-10 四道门禁，最终 CX-11 删除 Hermes；当前在线服务在计划审核阶段保持不变。
 
 ## Reset Step Plan
 
@@ -103,6 +104,8 @@
 - 历史运行日志与报告产物，仅保留 `.gitkeep`
 
 ## Change Log
+
+- 2026-07-20 Asia/Shanghai: `CX-00_CODEX_REPLACEMENT_PLAN` 完成，等待审核。基于 OpenAI 官方 Codex SDK/App Server 文档、本机 CLI 0.144.6 App Server Schema、官方 `openai-codex` Python SDK 0.144.4 和当前 Responses Provider 的真实 Web Search 烟测，确定用独立 Codex Agent sidecar 完整替换 Hermes。计划采用应用专属 CODEX_HOME、每节点独立 thread、SDK 流式事件/interrupt/output_schema、Codex 原生 Web Search、现有 PDF/OCR 工具栈和 Playwright MCP；LangGraph 继续负责外层业务状态。制定 CX-00 至 CX-12、Gate A-D、详细功能/可靠性/安全/双版本/业务验收矩阵和整版回滚方案。当前仅写计划，未改源码、配置或服务。详见 `outputs/Codex替换Hermes实施计划与验收标准.md` 和 `logs/codex_replacement_plan_20260720.md`；下一步为审核后执行 `CX-01_CODEX_SDK_ISOLATED_POC`。
 
 - 2026-07-19 Asia/Shanghai: `RESEARCH-HERMES-TOOLS-CODEX-01` 完成。核对 Hermes 官方配置/MCP/工具文档、社区配置经验和相关 GitHub issues：当前公开检索成功率主要受 search/extract backend、模型 tool calling、工具范围与浏览器反自动化影响，不应以百度/Bing 浏览器页面或当前回退搜索作为唯一生产路径。建议低运维采用 Tavily search/extract，私有化采用 SearXNG search + Firecrawl extract，并为 EIA 建立精简 profile、MCP 白名单和固定 Provider。独立子 Agent 同时审查 Codex CLI 接入：当前 LangGraph 执行边界支持替换 executor，优先用 `codex exec --json` 对 `HB-PT-002/HB-PT-009` 做 feature-flag A/B POC；通过后再建设 Codex sidecar，不建议把 Hermes -> Codex MCP 双 Agent 作为固定主链。详细来源、限制和验收顺序见 `logs/hermes_tooling_codex_research_20260719.md`。同时已在业务任务暂停后发布此前反馈修正/成果清理补丁；Desktop backend/Hermes ready，任务 `3e66d0a2-9e8b-42f1-b02d-6401a85a8bb0` 保持 `paused`、下一节点 `HB-PT-010`、无活动 run。
 
