@@ -1,0 +1,15 @@
+FROM eia-ai-hermes-tools:0.2.0@sha256:530900f9d396ec1aa86be942b92e1415a1f438c9955e7035a93b7898db515ae0
+
+ARG PIP_INDEX_URL=https://mirrors.aliyun.com/pypi/simple
+
+RUN pip install --no-cache-dir --index-url "${PIP_INDEX_URL}" \
+        openai-codex==0.144.4 \
+        img2pdf==0.6.3
+
+COPY scripts/codex_sdk_poc.py /opt/eia/scripts/codex_sdk_poc.py
+
+WORKDIR /poc
+
+HEALTHCHECK NONE
+
+ENTRYPOINT ["python", "/opt/eia/scripts/codex_sdk_poc.py"]

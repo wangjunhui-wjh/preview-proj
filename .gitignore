@@ -39,6 +39,7 @@ logs/*
 !logs/feedback_revision_*.md
 !logs/hermes_tooling_codex_research_*.md
 !logs/codex_replacement_plan_*.md
+!logs/codex_replacement_cx*.md
 
 # Generated outputs. Keep durable design/implementation Markdown documents.
 outputs/*
@@ -47,6 +48,7 @@ outputs/*
 !outputs/双版本系统验收记录.md
 !outputs/Hermes服务模式沙箱调研与改造建议.md
 !outputs/Codex替换Hermes实施计划与验收标准.md
+!outputs/Codex替换Hermes_CX-*.md
 
 # Local historical materials. Only the archive index is versioned.
 archive/*

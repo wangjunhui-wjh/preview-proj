@@ -12,10 +12,10 @@
 
 ## Current State
 
-- current_step: `CX-00_CODEX_REPLACEMENT_PLAN`
-- next_step: `CX-01_CODEX_SDK_ISOLATED_POC`
-- status: `codex_replacement_plan_ready_for_review`
-- last_updated: `2026-07-20 Asia/Shanghai`
+- current_step: `CX-01_CODEX_SDK_ISOLATED_POC`
+- next_step: `CX-02_CODEX_AGENT_SIDECAR`
+- status: `codex_gate_a_passed`
+- last_updated: `2026-07-21 Asia/Shanghai`
 - target_route: `Codex SDK/App Server Agent + LangGraph + uploaded HTML prototype`
 - active_agents: `Desktop Compose Hermes API Server eia-desktop-hermes-1, provider:custom:eia-managed, model:gpt-5.6-terra, terminal:local in Controller container`; `Desktop Compose backend eia-desktop-backend-1 on http://127.0.0.1:8501`
 
@@ -104,6 +104,12 @@
 - 历史运行日志与报告产物，仅保留 `.gitkeep`
 
 ## Change Log
+
+- 2026-07-21 Asia/Shanghai: `CX-01_CODEX_SDK_ISOLATED_POC` 完成，Gate A 通过。构建固定 `openai-codex/openai-codex-cli-bin==0.144.4` 的临时镜像 `eia-codex-agent-poc:0.144.4`，在只读根文件系统、普通用户、`CapDrop=ALL`、`no-new-privileges`、无 Docker socket/个人 home 的独立容器中完成结构化输出、终端、原生 Web Search、文字 PDF、扫描 OCR、DOCX、直接图片视觉、流式事件、Token usage、context compaction 和 interrupt 全量验收；生态环境部官方 URL 实测 HTTP 200，全程无 approval。最终鉴权改为 Provider 从 `OPENAI_API_KEY` 环境变量读取，真实容器复测成功且不生成 `auth.json`；日志/报告无 Key，早期临时鉴权文件已销毁。当前 Desktop backend/Hermes 保持 healthy，未重启、未切换。详见 `outputs/Codex替换Hermes_CX-01_Gate-A验收记录.md` 和 `logs/codex_replacement_cx01_20260721.md`；下一步为 `CX-02_CODEX_AGENT_SIDECAR`。
+
+- 2026-07-21 Asia/Shanghai: `CX-01B_ISOLATED_POC_ASSETS` 完成。新增 `scripts/codex_sdk_poc.py`：只读取 `OPENAI_API_KEY/OPENAI_BASE_URL/OPENAI_MODEL`，运行时生成独立 `CODEX_HOME`，固定 Responses、xhigh、拒绝人工审批和完整文件权限；隔离复制 PDF/DOCX 测试样本并生成图片与纯扫描 PDF，覆盖结构化输出、终端读写、原生 Web Search、文字 PDF、OCR、Office、直接图片视觉、流式事件、token usage、interrupt 和 context compaction。脚本编译与参数检查通过，尚未接入业务后端。下一步执行 Gate A 真实能力测试。
+
+- 2026-07-21 Asia/Shanghai: `CX-01A_CODEX_SDK_RUNTIME` 完成。仅在 `/tmp/eia-codex-sdk-poc-20260721/venv` 安装官方 `openai-codex==0.144.4` 与完全匹配的 `openai-codex-cli-bin==0.144.4`；CLI 大包通过阿里云 PyPI 镜像获取，`pip check` 返回无缺失依赖。未修改或重启当前 Desktop backend/Hermes，未触碰正在测试的业务任务。下一步建立应用专属 `CODEX_HOME` 和隔离 POC 资产。
 
 - 2026-07-20 Asia/Shanghai: `CX-00_CODEX_REPLACEMENT_PLAN` 完成，等待审核。基于 OpenAI 官方 Codex SDK/App Server 文档、本机 CLI 0.144.6 App Server Schema、官方 `openai-codex` Python SDK 0.144.4 和当前 Responses Provider 的真实 Web Search 烟测，确定用独立 Codex Agent sidecar 完整替换 Hermes。计划采用应用专属 CODEX_HOME、每节点独立 thread、SDK 流式事件/interrupt/output_schema、Codex 原生 Web Search、现有 PDF/OCR 工具栈和 Playwright MCP；LangGraph 继续负责外层业务状态。制定 CX-00 至 CX-12、Gate A-D、详细功能/可靠性/安全/双版本/业务验收矩阵和整版回滚方案。当前仅写计划，未改源码、配置或服务。详见 `outputs/Codex替换Hermes实施计划与验收标准.md` 和 `logs/codex_replacement_plan_20260720.md`；下一步为审核后执行 `CX-01_CODEX_SDK_ISOLATED_POC`。
 
