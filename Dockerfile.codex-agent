@@ -1,0 +1,31 @@
+FROM eia-ai-hermes-tools:0.2.0@sha256:530900f9d396ec1aa86be942b92e1415a1f438c9955e7035a93b7898db515ae0
+
+ARG PIP_INDEX_URL=https://mirrors.aliyun.com/pypi/simple
+
+COPY codex_agent/requirements.lock /tmp/codex-agent-requirements.lock
+RUN pip install --no-cache-dir --index-url "${PIP_INDEX_URL}" \
+        -r /tmp/codex-agent-requirements.lock
+
+RUN groupadd --gid 10001 codex-agent \
+    && useradd --uid 10001 --gid 10001 --create-home --home-dir /home/codex codex-agent
+
+COPY codex_agent /opt/eia/codex_agent
+
+WORKDIR /opt/eia
+ENV PYTHONPATH=/opt/eia
+ENV HOME=/home/codex
+ENV CODEX_HOME=/opt/data/codex-home
+ENV CODEX_RUN_STATE_DIR=/opt/data/runs
+ENV CODEX_WORKSPACE_ROOT=/opt/data/workspaces
+ENV AGENT_INPUT_ROOT=/eia/workspaces
+ENV AGENT_OUTPUT_ROOT=/eia/outputs
+ENV AGENT_VISION_ROOT=/eia/vision-cache
+
+EXPOSE 8765
+
+HEALTHCHECK --interval=15s --timeout=10s --start-period=45s --retries=10 \
+  CMD python -c "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8765/api/ready', timeout=8).read()" || exit 1
+
+USER 10001:10001
+
+CMD ["uvicorn", "codex_agent.main:app", "--host", "0.0.0.0", "--port", "8765"]

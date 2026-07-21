@@ -12,9 +12,9 @@
 
 ## Current State
 
-- current_step: `CX-01_CODEX_SDK_ISOLATED_POC`
-- next_step: `CX-02_CODEX_AGENT_SIDECAR`
-- status: `codex_gate_a_passed`
+- current_step: `CX-02_CODEX_AGENT_SIDECAR`
+- next_step: `CX-03_CODEX_REPRESENTATIVE_NODES`
+- status: `codex_sidecar_accepted_live_traffic_unchanged`
 - last_updated: `2026-07-21 Asia/Shanghai`
 - target_route: `Codex SDK/App Server Agent + LangGraph + uploaded HTML prototype`
 - active_agents: `Desktop Compose Hermes API Server eia-desktop-hermes-1, provider:custom:eia-managed, model:gpt-5.6-terra, terminal:local in Controller container`; `Desktop Compose backend eia-desktop-backend-1 on http://127.0.0.1:8501`
@@ -104,6 +104,12 @@
 - 历史运行日志与报告产物，仅保留 `.gitkeep`
 
 ## Change Log
+
+- 2026-07-21 Asia/Shanghai: `CX-02_CODEX_AGENT_SIDECAR` 完成。新增中性 `AgentClient` 和官方 SDK sidecar，固定镜像 `eia-codex-agent:0.144.4-cx02`；临时隔离容器真实通过 health、401 鉴权、结构化 Turn、SSE message/tool/usage、结果查询、活动 Turn interrupt 和重启后 completed Run 查询。安全验收中发现并修复 shell snapshot 持久化环境 Key：最终配置使用 `inherit=core`、敏感变量排除、`shell_snapshot=false`、`plugins/apps=false`；Agent shell 实测 `env-check.txt=CLEAN`，全 CODEX_HOME/run/events 双 Key 扫描 0 命中，无 auth.json/snapshot/plugin cache。当前 backend/Hermes 未改执行器、保持 healthy。详见 `outputs/Codex替换Hermes_CX-02_Sidecar验收记录.md` 和 `logs/codex_replacement_cx02_20260721.md`；下一步 `CX-03_CODEX_REPRESENTATIVE_NODES`。
+
+- 2026-07-21 Asia/Shanghai: `CX-02B_AGENT_CONTRACT_AND_SIDECAR` 实现完成，待容器验收。新增 `backend/agent_client.py` 中性契约；新增 `codex_agent/`，直接使用官方 SDK 管理独立 Thread/Turn、SSE、结构化输出、工具事件、Token、持久 run 状态和 interrupt，不实现自建 Agent 工具循环；新增固定 `Dockerfile.codex-agent` 和 `scripts/cx02_sidecar_smoke.py`。接口保持 `/health`、`/v1/runs`、run 查询、stop、events 形状，便于后续从 Hermes 平滑切换。Python 编译、Pydantic 和 Protocol 检查通过；尚未接管当前 backend。
+
+- 2026-07-21 Asia/Shanghai: `CX-02A_EXECUTION_BOUNDARY_REVIEW` 完成。当前后端通过 `HermesClient` 使用 `/health`、`POST /v1/runs`、`GET /v1/runs/{id}`、`POST /stop` 和 SSE 事件；主节点与辅助 Agent 都在 `backend/main.py` 内直接解释 Hermes 事件，任务字段仍为 `active_hermes_run_id/hermes_run_id`。CX-02 确定先新增同形中性 `AgentClient` 契约和独立 Codex sidecar，不接管现网执行、不修改 LangGraph 路由；CX-03 再接三个代表节点。下一步实现 sidecar 运行注册、SDK 事件映射、结构化结果和 interrupt。
 
 - 2026-07-21 Asia/Shanghai: `CX-01_CODEX_SDK_ISOLATED_POC` 完成，Gate A 通过。构建固定 `openai-codex/openai-codex-cli-bin==0.144.4` 的临时镜像 `eia-codex-agent-poc:0.144.4`，在只读根文件系统、普通用户、`CapDrop=ALL`、`no-new-privileges`、无 Docker socket/个人 home 的独立容器中完成结构化输出、终端、原生 Web Search、文字 PDF、扫描 OCR、DOCX、直接图片视觉、流式事件、Token usage、context compaction 和 interrupt 全量验收；生态环境部官方 URL 实测 HTTP 200，全程无 approval。最终鉴权改为 Provider 从 `OPENAI_API_KEY` 环境变量读取，真实容器复测成功且不生成 `auth.json`；日志/报告无 Key，早期临时鉴权文件已销毁。当前 Desktop backend/Hermes 保持 healthy，未重启、未切换。详见 `outputs/Codex替换Hermes_CX-01_Gate-A验收记录.md` 和 `logs/codex_replacement_cx01_20260721.md`；下一步为 `CX-02_CODEX_AGENT_SIDECAR`。
 
