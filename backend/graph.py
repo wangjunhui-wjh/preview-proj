@@ -57,9 +57,9 @@ def _project_task_state(task: EiaTaskState, *, mode: GraphMode, graph_route: Gra
 class EiaGraphRuntime:
     """LangGraph outer workflow runtime.
 
-    Hermes remains responsible for the autonomous work inside each HB node. This
-    runtime only owns node ordering, pause checks, node-boundary checkpointing,
-    and task-state projection back to the existing FastAPI/frontend API.
+    The configured Agent runtime remains responsible for autonomous work inside
+    each node. This runtime only owns node ordering, pause checks, node-boundary
+    checkpointing, and task-state projection back to the existing API.
     """
 
     def __init__(
@@ -83,6 +83,8 @@ class EiaGraphRuntime:
             if task.pause_requested:
                 task.status = "paused"
                 task.current_node = None
+                task.active_agent_provider = None
+                task.active_agent_run_id = None
                 task.active_hermes_run_id = None
                 task_store.save(task)
                 event_store.append(task_id, "task_paused", "Task paused before next node")
@@ -92,6 +94,8 @@ class EiaGraphRuntime:
                 if task.status != "completed":
                     task.status = "completed"
                     task.current_node = None
+                    task.active_agent_provider = None
+                    task.active_agent_run_id = None
                     task.active_hermes_run_id = None
                     task_store.save(task)
                     event_store.append(task_id, "task_completed", "Task completed")
@@ -100,6 +104,8 @@ class EiaGraphRuntime:
             if task.next_node not in self.implemented_nodes:
                 task.status = "failed"
                 task.current_node = None
+                task.active_agent_provider = None
+                task.active_agent_run_id = None
                 task.active_hermes_run_id = None
                 task.error = f"Node is not implemented yet: {task.next_node}"
                 task_store.save(task)
@@ -122,6 +128,8 @@ class EiaGraphRuntime:
                 latest = task_store.get(task_id)
                 latest.status = "failed"
                 latest.current_node = None
+                latest.active_agent_provider = None
+                latest.active_agent_run_id = None
                 latest.active_hermes_run_id = None
                 latest.error = str(exc)
                 task_store.save(latest)

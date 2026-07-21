@@ -17,6 +17,7 @@ from fastapi.responses import FileResponse, JSONResponse, Response, StreamingRes
 from fastapi.staticfiles import StaticFiles
 
 from .config import settings
+from .agent_client import AgentClient, HttpAgentClient
 from .event_store import event_store
 from .file_store import file_store
 from .graph import EiaGraphRuntime
@@ -24,6 +25,7 @@ from .hermes_client import hermes_client
 from .knowledge_ingestion import ingest_url_candidate
 from .knowledge_store import knowledge_store
 from .models import CreateTaskResponse, EiaTaskState, EvidenceRef, NodeResult, StepResponse, now_iso
+from .node_schema import codex_output_schema, parse_codex_output
 from .task_store import task_store
 from .validators import clean_markdown_output, extract_structured_result
 
@@ -115,6 +117,59 @@ STRUCTURED_TITLE_KEYS = (
     "name",
 )
 RUNNING_TASKS: set[str] = set()
+codex_agent_client = HttpAgentClient(
+    settings.codex_agent_base_url,
+    api_key=settings.codex_agent_api_key,
+    request_timeout_seconds=settings.request_timeout_seconds,
+)
+
+
+def _agent_provider(entrypoint: str | None = None) -> str:
+    return settings.provider_for(entrypoint)
+
+
+def _agent_client(provider: str) -> AgentClient:
+    if provider == "codex":
+        return codex_agent_client
+    if provider == "hermes":
+        return hermes_client
+    raise ValueError(f"Unsupported Agent provider: {provider}")
+
+
+def _agent_label(provider: str) -> str:
+    return "Codex Agent" if provider == "codex" else "Hermes Agent"
+
+
+def _set_active_agent(task: EiaTaskState, provider: str, run_id: str) -> None:
+    task.active_agent_provider = provider  # type: ignore[assignment]
+    task.active_agent_run_id = run_id
+    # Keep the legacy field populated only for actual Hermes runs. This prevents
+    # old clients from accidentally sending a Codex run ID to Hermes.
+    task.active_hermes_run_id = run_id if provider == "hermes" else None
+
+
+def _clear_active_agent(task: EiaTaskState) -> None:
+    task.active_agent_provider = None
+    task.active_agent_run_id = None
+    task.active_hermes_run_id = None
+
+
+def _active_agent(task: EiaTaskState) -> tuple[str | None, str | None]:
+    if task.active_agent_run_id:
+        provider = task.active_agent_provider or ("hermes" if task.active_hermes_run_id else settings.agent_provider)
+        return provider, task.active_agent_run_id
+    if task.active_hermes_run_id:
+        return "hermes", task.active_hermes_run_id
+    return None, None
+
+
+def _codex_local_images(task: EiaTaskState) -> list[str]:
+    image_suffixes = {".png", ".jpg", ".jpeg", ".webp", ".gif", ".bmp", ".tif", ".tiff"}
+    return [
+        _agent_project_file_path(task.task_id, ref)
+        for ref in task.project_files
+        if Path(ref.name).suffix.lower() in image_suffixes
+    ]
 
 
 def _load_prompt(name: str) -> str:
@@ -122,6 +177,18 @@ def _load_prompt(name: str) -> str:
     if not path.exists():
         raise FileNotFoundError(str(path))
     return path.read_text(encoding="utf-8")
+
+
+def _agent_developer_instructions(provider: str, node_id: str) -> str:
+    template = _load_prompt("agent_developer_instructions.txt")
+    substitutions = {
+        "agent_name": _agent_label(provider),
+        "node_id": node_id,
+        "native_search_tool": "Codex 原生 Web Search（webSearch）" if provider == "codex" else "Hermes 原生 web_search",
+    }
+    for key, value in substitutions.items():
+        template = template.replace("{" + key + "}", value)
+    return f"{_load_prompt('system_prompt.txt')}\n\n{template}".strip()
 
 
 def _task_or_404(task_id: str) -> EiaTaskState:
@@ -453,8 +520,14 @@ def _controller_vision_cache_path(task_id: str) -> str:
     return f"{CONTROLLER_VISION_CACHE_ROOT}/{task_id}"
 
 
-def _vision_handoff_context(task_id: str) -> str:
+def _vision_handoff_context(task_id: str, provider: str = "hermes") -> str:
     settings.vision_cache_dir.joinpath(task_id).mkdir(parents=True, exist_ok=True)
+    if provider == "codex":
+        return (
+            f"视觉/OCR 缓存目录：{_agent_vision_cache_path(task_id)}\n"
+            "Codex 可直接读取随请求附加的图片；PDF 中的图片页应先检查文本层，再按需渲染单页到缓存目录，"
+            "使用原生图片查看或 OCR 提取，不要把整份 PDF 无差别转成图片。"
+        )
     return (
         f"视觉缓存写入目录（终端可见）：{_agent_vision_cache_path(task_id)}\n"
         f"视觉工具读取目录（Hermes Controller 可见）：{_controller_vision_cache_path(task_id)}\n"
@@ -502,7 +575,7 @@ def _read_agent_workspace_outputs(
     return markdown, structured, sources
 
 
-async def _execute_hermes_aux_agent(
+async def _execute_agent_aux(
     *,
     task: EiaTaskState | None,
     node_id: str,
@@ -512,6 +585,9 @@ async def _execute_hermes_aux_agent(
     persist_result: bool = False,
     output_prefix: str | None = None,
 ) -> NodeResult:
+    provider = _agent_provider(node_id)
+    client = _agent_client(provider)
+    agent_label = _agent_label(provider)
     started_at = now_iso()
     output_chunks: list[str] = []
     tool_trace: list[dict[str, Any]] = []
@@ -520,15 +596,38 @@ async def _execute_hermes_aux_agent(
     status = "completed"
     error: str | None = None
     run_id: str | None = None
+    structured_override: dict[str, Any] = {}
     event_task_id = output_task_id or (task.task_id if task else "auxiliary")
     output_prefix = output_prefix or _aux_output_prefix(node_id)
 
     event_store.append(event_task_id, "node_start", f"{node_id} started", node_id=node_id)
+    if task:
+        active_task = task_store.get(task.task_id)
+        active_task.status = "running"
+        active_task.current_node = node_id
+        active_task.error = None
+        task_store.save(active_task)
     try:
-        run = await hermes_client.create_run(user_input, session_id=task.task_id if task else output_task_id)
+        run = await client.create_run(
+            user_input,
+            instructions=_agent_developer_instructions(provider, node_id),
+            session_id=task.task_id if task else output_task_id,
+            local_images=_codex_local_images(task) if provider == "codex" and task else None,
+            output_schema=codex_output_schema(node_id) if provider == "codex" else None,
+        )
         run_id = run["run_id"]
-        event_store.append(event_task_id, "hermes_run_started", f"Hermes run started: {run_id}", node_id=node_id, payload=run)
-        async for event in hermes_client.stream_run_events(run_id):
+        if task:
+            active_task = task_store.get(task.task_id)
+            _set_active_agent(active_task, provider, run_id)
+            task_store.save(active_task)
+        event_store.append(
+            event_task_id,
+            "agent_run_started",
+            f"{agent_label} run started: {run_id}",
+            node_id=node_id,
+            payload={"provider": provider, **run},
+        )
+        async for event in client.stream_run_events(run_id):
             kind = event.get("event") or event.get("type")
             if kind == "message.delta":
                 delta = event.get("delta") or event.get("text") or ""
@@ -541,19 +640,19 @@ async def _execute_hermes_aux_agent(
                 command = event.get("command") or event.get("description") or "unknown command"
                 status = "failed"
                 error = (
-                    "Hermes requested manual tool approval during unattended auxiliary execution; "
+                    f"{agent_label} requested manual tool approval during unattended auxiliary execution; "
                     f"the run was stopped. Requested action: {command}"
                 )
                 event_store.append(event_task_id, "node_failed", error, node_id=node_id, payload=event)
                 try:
-                    await hermes_client.stop_run(run_id)
+                    await client.stop_run(run_id)
                 except Exception:
                     pass
                 break
             if kind == "run.completed":
                 output_text = event.get("output", "")
                 usage = event.get("usage") or {}
-                event_store.append(event_task_id, "node_complete", f"{node_id} completed", node_id=node_id, payload=event)
+                event_store.append(event_task_id, "agent_event", str(kind), node_id=node_id, payload=event)
                 break
             if kind in {"run.failed", "error"}:
                 status = "failed"
@@ -562,30 +661,50 @@ async def _execute_hermes_aux_agent(
                 break
             if kind in {"run.cancelled", "run.stopped", "run.expired", "run.timeout"}:
                 status = "failed"
-                error = f"Hermes run ended before completion: {kind}"
+                error = f"{agent_label} run ended before completion: {kind}"
                 event_store.append(event_task_id, "node_failed", error, node_id=node_id, payload=event)
                 break
-            event_store.append(event_task_id, "hermes_event", str(kind or "event"), node_id=node_id, payload=event)
+            event_store.append(event_task_id, "agent_event", str(kind or "event"), node_id=node_id, payload=event)
     except Exception as exc:  # noqa: BLE001
         status = "failed"
-        error = f"Hermes auxiliary execution error: {exc}"
+        error = f"{agent_label} auxiliary execution error: {exc}"
         event_store.append(event_task_id, "node_failed", error, node_id=node_id, payload={"run_id": run_id})
         if run_id:
             try:
-                await hermes_client.stop_run(run_id)
+                await client.stop_run(run_id)
             except Exception:
                 pass
 
-    if not output_text and run_id:
+    if (not output_text or provider == "codex") and run_id:
         try:
-            final = await hermes_client.get_run(run_id)
+            final = await client.get_run(run_id)
             output_text = final.get("output") or "".join(output_chunks)
             usage = final.get("usage") or usage
+            if provider == "codex" and final.get("status") == "completed":
+                raw_output = final.get("structured") or output_text
+                codex_markdown, codex_structured, _evidence, validation_errors = parse_codex_output(node_id, raw_output)
+                if validation_errors:
+                    status = "failed"
+                    error = "Codex output validation failed: " + "; ".join(validation_errors)
+                    event_store.append(
+                        event_task_id,
+                        "node_failed",
+                        error,
+                        node_id=node_id,
+                        payload={"provider": provider, "run_id": run_id, "validation_errors": validation_errors},
+                    )
+                else:
+                    output_text = codex_markdown
+                    structured_override = codex_structured
             if final.get("status") not in {"completed", None} and status != "failed":
                 status = "failed"
-                error = final.get("error") or f"Hermes run ended with status: {final.get('status')}"
-        except Exception:
+                error = final.get("error") or f"{agent_label} run ended with status: {final.get('status')}"
+        except Exception as exc:  # noqa: BLE001
             output_text = "".join(output_chunks)
+            if provider == "codex" and status != "failed":
+                status = "failed"
+                error = f"Codex result retrieval error: {exc}"
+                event_store.append(event_task_id, "node_failed", error, node_id=node_id, payload={"run_id": run_id})
     if not output_text:
         output_text = "".join(output_chunks)
     if status == "failed" and output_text and error:
@@ -617,10 +736,18 @@ async def _execute_hermes_aux_agent(
             )
 
     result_text = workspace_markdown or output_text
-    structured = workspace_structured or extract_structured_result(result_text) or extract_structured_result(output_text)
+    structured = structured_override or workspace_structured or extract_structured_result(result_text) or extract_structured_result(output_text)
     markdown = clean_markdown_output(result_text)
     if status == "failed" and markdown and error and error not in markdown:
         markdown = f"{markdown}\n\n> 辅助 Agent 未完成：{error}"
+    if status == "completed":
+        event_store.append(
+            event_task_id,
+            "node_complete",
+            f"{node_id} completed",
+            node_id=node_id,
+            payload={"provider": provider, "run_id": run_id, "usage": usage},
+        )
     evidence_refs: list[EvidenceRef] = []
     if status != "failed" and (task or output_task_id):
         record_task_id = task.task_id if task else output_task_id
@@ -695,21 +822,38 @@ async def _execute_hermes_aux_agent(
         evidence_refs=evidence_refs,
         tool_trace=tool_trace,
         output_files=output_files,
-        hermes_run_id=run_id,
+        agent_provider=provider,  # type: ignore[arg-type]
+        agent_run_id=run_id,
+        hermes_run_id=run_id if provider == "hermes" else None,
         error=error,
         started_at=started_at,
         completed_at=now_iso(),
     )
     if task:
+        latest_task = task_store.get(task.task_id)
         if persist_result:
-            task.module_results[node_id] = result
-            _rebuild_task_evidence_from_results(task)
+            latest_task.module_results[node_id] = result
+            _rebuild_task_evidence_from_results(latest_task)
         for ref in evidence_refs:
-            if ref not in task.evidence_refs:
-                task.evidence_refs.append(ref)
-            if ref.knowledge_document_id and ref.knowledge_document_id not in task.candidate_doc_ids:
-                task.candidate_doc_ids.append(ref.knowledge_document_id)
-        task_store.save(task)
+            if not any(
+                existing.source_url == ref.source_url
+                and existing.knowledge_document_id == ref.knowledge_document_id
+                for existing in latest_task.evidence_refs
+            ):
+                latest_task.evidence_refs.append(ref)
+            if ref.knowledge_document_id and ref.knowledge_document_id not in latest_task.candidate_doc_ids:
+                latest_task.candidate_doc_ids.append(ref.knowledge_document_id)
+        _clear_active_agent(latest_task)
+        latest_task.current_node = None
+        if latest_task.status == "running":
+            latest_task.status = "paused" if latest_task.next_node else "completed"
+        task_store.save(latest_task)
+        task.status = latest_task.status
+        task.current_node = latest_task.current_node
+        task.module_results = latest_task.module_results
+        task.evidence_refs = latest_task.evidence_refs
+        task.candidate_doc_ids = latest_task.candidate_doc_ids
+        _clear_active_agent(task)
     return result
 
 
@@ -723,8 +867,16 @@ def _project_file_context(task: EiaTaskState) -> str:
     return "\n".join(lines) or "无上传文件"
 
 
-def _build_aux_prompt(task: EiaTaskState | None, prompt_name: str, replacements: dict[str, str], *, node_id: str) -> str:
-    system_prompt = _load_prompt("system_prompt.txt")
+def _build_aux_prompt(
+    task: EiaTaskState | None,
+    prompt_name: str,
+    replacements: dict[str, str],
+    *,
+    node_id: str,
+    provider: str | None = None,
+) -> str:
+    provider = provider or _agent_provider(node_id)
+    agent_label = _agent_label(provider)
     template = _load_prompt(prompt_name)
     if task:
         replacements = {
@@ -738,7 +890,7 @@ def _build_aux_prompt(task: EiaTaskState | None, prompt_name: str, replacements:
 任务 ID：{task.task_id}
 项目文件目录：{_agent_workspace_path(task.task_id)}/project_files
 可写成果目录：{_agent_artifact_path(task.task_id)}
-{_vision_handoff_context(task.task_id)}
+        {_vision_handoff_context(task.task_id, provider)}
 已上传项目文件：
 {_project_file_context(task)}
 """.strip()
@@ -754,25 +906,41 @@ def _build_aux_prompt(task: EiaTaskState | None, prompt_name: str, replacements:
     prompt_text = template
     for key, value in replacements.items():
         prompt_text = prompt_text.replace("{" + key + "}", value)
-    return f"""
-{system_prompt}
+    output_contract = ""
+    if provider == "codex":
+        output_contract = f"""
 
-你正在作为 Hermes Agent 执行环评前期研判辅助任务。请自主读取资料、必要时使用 web_search，但不得编造依据。
+最终输出必须是符合系统提供 JSON Schema 的单个 JSON 对象，不要在对象外输出说明文字或代码围栏：
+- completion_state 固定为 completed，node_id 固定为 {node_id}；只有真正完成分析后才可生成最终对象。
+- markdown 放页面完整正文，必须包含提示词要求的所有章节和固定免责声明。
+- structured_json 放可被 json.loads 解析的 JSON 对象字符串，只保留关键字段，不重复 Markdown 全文。
+- evidence_refs 记录实际读取文件或实际检索得到的依据；联网来源必须填写真实 URL。
+- limitations 如实记录资料不足、无法读取或需要人工核实的事项。
+""".rstrip()
+        search_rule = "联网发现来源必须优先使用 Codex 原生 Web Search。禁止使用 Shell、curl、wget、搜索网站 HTML/JS 或逆向搜索接口来实现搜索；只有已经获得确切 URL 后，才可用一次网络请求核验该页面。"
+        source_rule = "政策依据优先使用原生 Web Search 返回的官方 URL、标题、摘要和可见正文；如无法抽取正文，记录候选 URL 并标注人工核实。"
+    else:
+        search_rule = "联网发现来源优先使用 Hermes 原生 web_search，不要通过 Shell 反复试探搜索网站接口。"
+        source_rule = "政策依据优先使用 web_search/web_extract 返回的官方 URL、标题、摘要和可见正文；如无法抽取正文，记录候选 URL 并标注人工核实。"
+    return f"""
+你正在作为 {agent_label} 执行环评前期研判辅助任务。请自主读取资料、必要时使用原生 Web Search，但不得编造依据。
 
 节点：{node_id}
 {task_context}
 
-执行环境：你运行在受控 Hermes Agent 终端执行环境中。可自主选择 Shell、Python、OCR、Hermes 原生视觉、文档转换、网页检索和子 Agent 等能力；不要等待人工命令批准。项目文件目录为只读，必要的过程文件写入 `/workspace`，需要保留的成果可写入上述成果目录。
+执行环境：你运行在受控 {agent_label} 终端执行环境中。可自主选择 Shell、Python、OCR、原生视觉、文档转换、网页检索和子 Agent 等能力；不要等待人工命令批准。项目文件目录为只读，必要的过程文件写入当前工作目录，需要保留的成果可写入上述成果目录。
 
 工作要求：
 1. 读取 PDF 时优先识别文字层，再对扫描页或图片页做 OCR/视觉识别；不要把整份 PDF 简单当作图片处理。
-2. 政策依据优先使用 web_search/web_extract 返回的官方 URL、标题、摘要和可见正文；如无法抽取正文，记录候选 URL 并标注人工核实。
-3. 工具预算：最多组织 8 次 web_search、6 次 web_extract 或浏览器正文读取；达到预算仍无法确认时停止搜索。
-4. 输出预算：{_node_output_budget(node_id)} 不要粘贴大段 OCR 原文、政策原文或搜索摘要。
+2. {search_rule}
+3. {source_rule}
+4. 工具调用不设置固定次数，以形成完整、可核验结果为准；不要重复同一查询、同一 URL 或无新增信息的工具路径，依据不足时如实结束并列出人工核实项。
+5. 输出预算：{_node_output_budget(node_id)} 不要粘贴大段 OCR 原文、政策原文或搜索摘要。
 
 请严格执行以下辅助提示词：
 
 {prompt_text}
+{output_contract}
 """.strip()
 
 
@@ -797,8 +965,15 @@ def _node_prompt_template(task: EiaTaskState, node_id: str) -> str:
     return override or _load_prompt(NODE_PROMPTS[node_id])
 
 
-def _build_node_input(task: EiaTaskState, node_id: str, workspace: Path) -> str:
-    system_prompt = _load_prompt("system_prompt.txt")
+def _build_node_input(
+    task: EiaTaskState,
+    node_id: str,
+    workspace: Path,
+    *,
+    provider: str | None = None,
+) -> str:
+    provider = provider or _agent_provider(node_id)
+    agent_label = _agent_label(provider)
     node_prompt_template = _node_prompt_template(task, node_id)
     project_file_lines = []
     for ref in task.project_files:
@@ -819,32 +994,18 @@ def _build_node_input(task: EiaTaskState, node_id: str, workspace: Path) -> str:
     prompt_text = prompt_text.replace("{module_outputs}", _module_output_context(task))
     prompt_text = prompt_text.replace("{final_report}", _final_report_context(task))
     prompt_text = prompt_text.replace("{evidence_context}", evidence_context)
-    return f"""
-{system_prompt}
-
-你正在作为 Hermes Agent 执行环评前期研判节点。请在工作区内自主读取资料、必要时使用 web_search，但不得编造依据。
-
-任务 ID：{task.task_id}
-节点：{node_id}
-沙箱工作区：/workspace
-项目文件目录：{_agent_workspace_path(task.task_id)}/project_files
-可写成果目录：{_agent_artifact_path(task.task_id)}
-{_vision_handoff_context(task.task_id)}
-已上传项目文件：
-{project_files}
-
-执行环境：你运行在受控 Hermes Agent 终端执行环境中。可自主选择 Shell、Python、OCR、Hermes 原生视觉、文档转换、网页检索和子 Agent 等能力；不要等待人工命令批准。项目文件目录为只读，过程文件写入 `/workspace`，需要保留的成果写入上述成果目录。
-
-工作要求：
-1. 读取 PDF 时优先识别文字层，再对扫描页或图片页做 OCR/视觉识别；不要把整份 PDF 简单当作图片处理。
-2. 政策依据优先使用 web_search/web_extract 返回的官方 URL、标题、摘要和可见正文；如 web_extract 失败，仍可在沙箱内采用适当工具核验，但必须记录真实来源和限制。
-3. 工具预算：每个节点最多组织 8 次 web_search、6 次 web_extract 或浏览器正文读取；达到预算仍无法确认时停止搜索，输出“资料不足，建议人工核实”，不要反复变换近义查询词。
-4. 输出预算：{_node_output_budget(node_id)} 不要重复输出 Markdown 表格和等价 JSON；JSON 只保留可供程序读取的关键字段、风险项、依据 URL 和需补充资料。{prep_constraint}
-
-请严格执行以下节点提示词：
-
-{prompt_text}
-
+    if provider == "codex":
+        output_format = f"""
+输出格式要求：
+1. 最终输出必须是符合系统提供 JSON Schema 的单个 JSON 对象，对象外不得有说明文字或代码围栏。
+2. completion_state 固定为 completed，node_id 固定为 {node_id}；只有完成全部必需章节后才可结束。
+3. markdown 字段是页面展示的完整研判结果，必须包含节点提示词要求的章节和固定免责声明。
+4. structured_json 字段是可被 json.loads 解析的 JSON 对象字符串，只保留关键结论、风险、依据和补充资料。
+5. evidence_refs 只记录实际读取或检索过的来源，联网依据必须填写真实 URL；依据不足时写入 limitations 和正文。
+6. 不得把“继续检索”“接下来核验”或工具计划作为最终结果。
+""".strip()
+    else:
+        output_format = """
 输出格式要求：
 1. 先输出 Markdown 结论，便于页面展示。
 2. 如能结构化，请额外输出一个 JSON 代码块或 BEGIN_NODE_RESULT_JSON/END_NODE_RESULT_JSON 包裹的 JSON。
@@ -852,11 +1013,399 @@ def _build_node_input(task: EiaTaskState, node_id: str, workspace: Path) -> str:
 4. 如依据不足，请明确写“资料不足，建议人工核实”。
 5. 输出应详细但克制：不要粘贴大段 OCR 原文、政策原文或搜索摘要；Markdown 以结论、关键表格和补充清单为主，结构化 JSON 避免重复 Markdown 全文。
 """.strip()
+    if provider == "codex":
+        search_rule = "联网发现来源必须优先使用 Codex 原生 Web Search。禁止使用 Shell、curl、wget、搜索网站 HTML/JS 或逆向搜索接口来实现搜索；只有已经获得确切 URL 后，才可用一次网络请求核验该页面。"
+        source_rule = "政策依据优先使用原生 Web Search 返回的官方 URL、标题、摘要和可见正文；如正文提取失败，记录候选 URL 和限制，不要反复绕过站点限制。"
+    else:
+        search_rule = "联网发现来源优先使用 Hermes 原生 web_search，不要通过 Shell 反复试探搜索网站接口。"
+        source_rule = "政策依据优先使用 web_search/web_extract 返回的官方 URL、标题、摘要和可见正文；如正文提取失败，记录候选 URL 和限制。"
+    return f"""
+你正在作为 {agent_label} 执行环评前期研判节点。请在工作区内自主读取资料、必要时使用原生 Web Search，但不得编造依据。
+
+任务 ID：{task.task_id}
+节点：{node_id}
+Agent 工作区：{workspace}
+项目文件目录：{_agent_workspace_path(task.task_id)}/project_files
+可写成果目录：{_agent_artifact_path(task.task_id)}
+{_vision_handoff_context(task.task_id, provider)}
+已上传项目文件：
+{project_files}
+
+执行环境：你运行在受控 {agent_label} 终端执行环境中。可自主选择 Shell、Python、OCR、原生视觉、文档转换、网页检索和子 Agent 等能力；不要等待人工命令批准。项目文件目录为只读，过程文件写入当前 Agent 工作区，需要保留的成果写入上述成果目录。
+
+工作要求：
+1. 读取 PDF 时优先识别文字层，再对扫描页或图片页做 OCR/视觉识别；不要把整份 PDF 简单当作图片处理。
+2. {search_rule}
+3. {source_rule}
+4. 工具调用不设置固定次数，以形成完整、可核验结果为准；不要重复同一查询、同一 URL 或无新增信息的工具路径，依据不足时如实结束并列出人工复核项。
+5. 输出预算：{_node_output_budget(node_id)} 不要重复输出 Markdown 表格和等价 JSON；JSON 只保留可供程序读取的关键字段、风险项、依据 URL 和需补充资料。{prep_constraint}
+
+请严格执行以下节点提示词：
+
+{prompt_text}
+
+{output_format}
+""".strip()
+
+
+async def _record_node_evidence(
+    task: EiaTaskState,
+    node_id: str,
+    markdown: str,
+    structured: dict[str, Any],
+) -> list[EvidenceRef]:
+    """Record URLs surfaced by either Agent runtime as reviewable candidates."""
+    evidence_refs: list[EvidenceRef] = []
+    for candidate in _collect_evidence_url_candidates(markdown, structured):
+        url = candidate["url"]
+        title = candidate.get("title") or ""
+        record_id = knowledge_store.record_web_search(
+            task_id=task.task_id,
+            node_id=node_id,
+            query="",
+            result_url=url,
+            title=title,
+            snippet="",
+            metadata={"source": "node_final_output", "sources": candidate.get("sources", [])},
+        )
+        metadata = {
+            "task_id": task.task_id,
+            "node_id": node_id,
+            "web_search_record_id": record_id,
+            "source": "node_final_output",
+            "sources": candidate.get("sources", []),
+        }
+        try:
+            existing_doc = knowledge_store.get_active_candidate_by_url(url)
+            if existing_doc and existing_doc.local_path and existing_doc.text_path:
+                doc = knowledge_store.create_candidate_url(url, title=title, metadata=metadata)
+            else:
+                doc = await ingest_url_candidate(url, title=title, task_id=task.task_id, node_id=node_id)
+                doc.metadata = {**doc.metadata, **metadata}
+                doc = knowledge_store.upsert_document(doc)
+        except Exception as exc:  # noqa: BLE001
+            doc = knowledge_store.create_candidate_url(
+                url,
+                title=title,
+                metadata={**metadata, "ingest_error": str(exc)},
+            )
+        if doc.id not in task.candidate_doc_ids:
+            task.candidate_doc_ids.append(doc.id)
+        evidence_refs.append(
+            EvidenceRef(
+                id=record_id,
+                source_type="url",
+                title=doc.title or title or url,
+                source_url=url,
+                knowledge_document_id=doc.id,
+                retrieved_at=doc.retrieved_at,
+                confidence="candidate",
+            )
+        )
+    return evidence_refs
+
+
+async def _run_codex_node(
+    task: EiaTaskState,
+    node_id: str,
+    *,
+    continue_on_success: bool = False,
+) -> NodeResult:
+    """Run one business node through the Codex Agent sidecar."""
+    started_at = now_iso()
+    provider = "codex"
+    client = _agent_client(provider)
+    try:
+        workspace = file_store.prepare_workspace(task)
+        output_dir = settings.output_dir / task.task_id
+        output_dir.mkdir(parents=True, exist_ok=True)
+    except Exception as exc:  # noqa: BLE001
+        error = f"Failed to prepare workspace: {exc}"
+        result = NodeResult(
+            node_id=node_id,
+            status="failed",
+            title=NODE_TITLES.get(node_id, node_id),
+            agent_provider=provider,
+            error=error,
+            started_at=started_at,
+            completed_at=now_iso(),
+        )
+        task.status = "failed"
+        task.current_node = None
+        task.error = error
+        task.module_results[node_id] = result
+        task_store.save(task)
+        event_store.append(task.task_id, "node_failed", error, node_id=node_id)
+        return result
+
+    prompts_dir = workspace / "prompts"
+    prompts_dir.mkdir(parents=True, exist_ok=True)
+    (prompts_dir / "system_prompt.txt").write_text(_load_prompt("system_prompt.txt"), encoding="utf-8")
+    (prompts_dir / NODE_PROMPTS[node_id]).write_text(_node_prompt_template(task, node_id), encoding="utf-8")
+    task.status = "running"
+    task.current_node = node_id
+    task.error = None
+    task_store.save(task)
+    event_store.append(
+        task.task_id,
+        "node_start",
+        f"{node_id} started",
+        node_id=node_id,
+        payload={"provider": provider},
+    )
+
+    user_input = _build_node_input(task, node_id, workspace, provider=provider)
+    run_id: str | None = None
+    output_text = ""
+    output_chunks: list[str] = []
+    tool_trace: list[dict[str, Any]] = []
+    usage: dict[str, Any] = {}
+    status = "completed"
+    error: str | None = None
+    paused_by_user = False
+    pending_delta = ""
+    final_payload: dict[str, Any] = {}
+    structured: dict[str, Any] = {}
+
+    def flush_delta() -> None:
+        nonlocal pending_delta
+        if pending_delta:
+            event_store.append(
+                task.task_id,
+                "node_output_partial",
+                pending_delta,
+                node_id=node_id,
+                payload={"provider": provider, "run_id": run_id},
+            )
+            pending_delta = ""
+
+    try:
+        run = await client.create_run(
+            user_input,
+            instructions=_agent_developer_instructions(provider, node_id),
+            session_id=task.task_id,
+            local_images=_codex_local_images(task),
+            output_schema=codex_output_schema(node_id),
+        )
+        run_id = run["run_id"]
+        latest_task = task_store.get(task.task_id)
+        _set_active_agent(latest_task, provider, run_id)
+        if not latest_task.pause_requested:
+            latest_task.status = "running"
+        task_store.save(latest_task)
+        event_store.append(
+            task.task_id,
+            "agent_call_start",
+            f"Codex Agent run started: {run_id}",
+            node_id=node_id,
+            payload={"provider": provider, "run_id": run_id},
+        )
+
+        if latest_task.pause_requested:
+            paused_by_user = True
+            status = "failed"
+            error = "Task paused by user before Codex event stream opened."
+            await client.stop_run(run_id)
+            event_store.append(
+                task.task_id,
+                "node_paused",
+                error,
+                node_id=node_id,
+                payload={"provider": provider, "run_id": run_id, "phase": "before_stream"},
+            )
+        else:
+            async for event in client.stream_run_events(run_id):
+                kind = event.get("event") or event.get("type") or "unknown"
+                if kind in {"tool.started", "tool.completed"}:
+                    flush_delta()
+                    tool_trace.append(event)
+                    event_store.append(
+                        task.task_id,
+                        "tool_event",
+                        event.get("tool") or kind,
+                        node_id=node_id,
+                        payload={"provider": provider, **event},
+                    )
+                elif kind == "message.delta":
+                    delta = str(event.get("delta") or "")
+                    if delta:
+                        output_chunks.append(delta)
+                        pending_delta += delta
+                        if len(pending_delta) >= 240 or ("\n" in pending_delta and len(pending_delta) >= 80):
+                            flush_delta()
+                elif kind == "usage.updated":
+                    usage = event.get("usage") or {}
+                    event_store.append(task.task_id, "agent_usage_updated", "Codex usage updated", node_id=node_id, payload=event)
+                elif kind == "reasoning.available":
+                    flush_delta()
+                    event_store.append(
+                        task.task_id,
+                        "agent_reasoning_signal",
+                        "Agent reasoning signal received; internal reasoning text is not exposed.",
+                        node_id=node_id,
+                        payload={"provider": provider, "run_id": run_id},
+                    )
+                elif kind == "agent_context_compacted":
+                    flush_delta()
+                    event_store.append(task.task_id, "agent_context_compacted", "Codex context compacted", node_id=node_id, payload=event)
+                elif kind == "run.completed":
+                    flush_delta()
+                    output_text = str(event.get("output") or "")
+                    usage = event.get("usage") or usage
+                    event_store.append(task.task_id, "agent_event", kind, node_id=node_id, payload=event)
+                    break
+                elif kind == "approval.request":
+                    flush_delta()
+                    status = "failed"
+                    error = f"Codex requested manual approval in unattended execution: {event.get('command') or event.get('description') or 'unknown action'}"
+                    event_store.append(task.task_id, "node_failed", error, node_id=node_id, payload=event)
+                    await client.stop_run(run_id)
+                    break
+                elif kind in {"run.failed", "error"}:
+                    flush_delta()
+                    status = "failed"
+                    error = event.get("error") or event.get("message") or json.dumps(event, ensure_ascii=False)
+                    event_store.append(task.task_id, "node_failed", error, node_id=node_id, payload=event)
+                    break
+                elif kind in {"run.cancelled", "run.stopped", "run.expired", "run.timeout"}:
+                    flush_delta()
+                    latest_task = task_store.get(task.task_id)
+                    if latest_task.pause_requested:
+                        paused_by_user = True
+                        status = "failed"
+                        error = "Task paused by user; active Codex run was stopped."
+                        event_store.append(task.task_id, "node_paused", error, node_id=node_id, payload=event)
+                    else:
+                        status = "failed"
+                        error = f"Codex run ended before completion: {kind}"
+                        event_store.append(task.task_id, "node_failed", error, node_id=node_id, payload=event)
+                    break
+                else:
+                    event_store.append(task.task_id, "agent_event", kind, node_id=node_id, payload=event)
+    except Exception as exc:  # noqa: BLE001
+        flush_delta()
+        status = "failed"
+        error = f"Codex execution error: {exc}"
+        event_store.append(task.task_id, "node_failed", error, node_id=node_id, payload={"run_id": run_id, "provider": provider})
+        if run_id:
+            try:
+                await client.stop_run(run_id)
+            except Exception:
+                pass
+    flush_delta()
+
+    if run_id:
+        try:
+            final_payload = await client.get_run(run_id)
+            output_text = str(final_payload.get("output") or output_text or "".join(output_chunks))
+            usage = final_payload.get("usage") or usage
+            if status != "failed" and final_payload.get("status") != "completed":
+                status = "failed"
+                error = final_payload.get("error") or f"Codex run ended with status: {final_payload.get('status')}"
+            if status != "failed" and final_payload.get("status") == "completed":
+                raw_output = final_payload.get("structured") or output_text
+                markdown, structured, _envelope_evidence, validation_errors = parse_codex_output(node_id, raw_output)
+                if validation_errors:
+                    status = "failed"
+                    error = "Codex output validation failed: " + "; ".join(validation_errors)
+                    event_store.append(
+                        task.task_id,
+                        "node_failed",
+                        error,
+                        node_id=node_id,
+                        payload={"provider": provider, "run_id": run_id, "validation_errors": validation_errors},
+                    )
+                else:
+                    output_text = markdown
+                    event_store.append(
+                        task.task_id,
+                        "node_complete",
+                        f"{node_id} completed",
+                        node_id=node_id,
+                        payload={"provider": provider, "run_id": run_id, "usage": usage},
+                    )
+        except Exception as exc:  # noqa: BLE001
+            if status != "failed":
+                status = "failed"
+                error = f"Codex result retrieval error: {exc}"
+                event_store.append(task.task_id, "node_failed", error, node_id=node_id, payload={"run_id": run_id})
+
+    if not output_text:
+        output_text = "".join(output_chunks)
+    if status == "failed" and output_text and error:
+        output_text = f"{output_text}\n\n> 节点未完成：{error}"
+    if status == "failed" and not output_text:
+        output_text = (
+            f"## {NODE_TITLES.get(node_id, node_id)} 执行失败\n\n"
+            f"错误：{error or '未知错误'}\n\n请确认资料和 Codex Agent 服务后重试。"
+        )
+
+    structured = structured if status == "completed" else {}
+    if not structured:
+        structured = extract_structured_result(output_text) or {"error": error} if status == "failed" else {}
+    markdown = clean_markdown_output(output_text)
+    out_dir = settings.output_dir / task.task_id
+    out_dir.mkdir(parents=True, exist_ok=True)
+    md_path = out_dir / f"{node_id}.md"
+    json_path = out_dir / f"{node_id}.json"
+    trace_path = out_dir / f"{node_id}.tool_trace.json"
+    evidence_path = out_dir / f"{node_id}.evidence_refs.json"
+    md_path.write_text(markdown, encoding="utf-8")
+    json_path.write_text(json.dumps(structured or {"raw_markdown": markdown, "usage": usage}, ensure_ascii=False, indent=2), encoding="utf-8")
+    trace_path.write_text(json.dumps(tool_trace, ensure_ascii=False, indent=2), encoding="utf-8")
+    evidence_refs = await _record_node_evidence(task, node_id, markdown, structured) if status == "completed" and not paused_by_user else []
+    evidence_path.write_text(json.dumps([ref.model_dump() for ref in evidence_refs], ensure_ascii=False, indent=2), encoding="utf-8")
+
+    result = NodeResult(
+        node_id=node_id,
+        status=status,
+        title=NODE_TITLES.get(node_id, node_id),
+        markdown=markdown,
+        structured=structured,
+        evidence_refs=evidence_refs,
+        tool_trace=tool_trace,
+        output_files=[md_path.name, json_path.name, trace_path.name, evidence_path.name],
+        agent_provider="codex",
+        agent_run_id=run_id,
+        error=error,
+        started_at=started_at,
+        completed_at=now_iso(),
+    )
+    latest_task = task_store.get(task.task_id)
+    if paused_by_user:
+        latest_task.module_results.pop(node_id, None)
+        _rebuild_task_evidence_from_results(latest_task)
+        latest_task.status = "paused"
+        latest_task.next_node = node_id
+        latest_task.error = error
+    elif status == "failed":
+        latest_task.status = "failed"
+        latest_task.error = error
+        latest_task.module_results[node_id] = result
+    else:
+        latest_task.module_results[node_id] = result
+        latest_task.next_node = NEXT_NODE.get(node_id)
+        latest_task.status = "running" if latest_task.next_node and continue_on_success else ("paused" if latest_task.next_node else "completed")
+        latest_task.error = None
+        for doc_id in task.candidate_doc_ids:
+            if doc_id not in latest_task.candidate_doc_ids:
+                latest_task.candidate_doc_ids.append(doc_id)
+        for ref in evidence_refs:
+            if not any(existing.source_url == ref.source_url and existing.knowledge_document_id == ref.knowledge_document_id for existing in latest_task.evidence_refs):
+                latest_task.evidence_refs.append(ref)
+    _clear_active_agent(latest_task)
+    latest_task.current_node = None
+    task_store.save(latest_task)
+    if latest_task.status == "completed":
+        event_store.append(task.task_id, "task_completed", "Task completed")
+    return result
 
 
 async def _run_node(task: EiaTaskState, node_id: str, *, continue_on_success: bool = False) -> NodeResult:
     if node_id not in NODE_PROMPTS:
         raise HTTPException(status_code=400, detail=f"Node is not implemented yet: {node_id}")
+    if _agent_provider(node_id) == "codex":
+        return await _run_codex_node(task, node_id, continue_on_success=continue_on_success)
     started_at = now_iso()
     try:
         workspace = file_store.prepare_workspace(task)
@@ -914,11 +1463,15 @@ async def _run_node(task: EiaTaskState, node_id: str, *, continue_on_success: bo
         pending_delta = ""
 
     try:
-        run = await hermes_client.create_run(user_input, session_id=task.task_id)
+        run = await hermes_client.create_run(
+            user_input,
+            instructions=_agent_developer_instructions("hermes", node_id),
+            session_id=task.task_id,
+        )
         run_id = run["run_id"]
         latest_task = task_store.get(task.task_id)
         latest_task.current_node = node_id
-        latest_task.active_hermes_run_id = run_id
+        _set_active_agent(latest_task, "hermes", run_id)
         if not latest_task.pause_requested:
             latest_task.status = "running"
         task_store.save(latest_task)
@@ -1197,6 +1750,8 @@ async def _run_node(task: EiaTaskState, node_id: str, *, continue_on_success: bo
         evidence_refs=evidence_refs,
         tool_trace=tool_trace,
         output_files=[md_path.name, json_path.name, trace_path.name, evidence_path.name],
+        agent_provider="hermes",
+        agent_run_id=run_id,
         hermes_run_id=run_id,
         error=error,
         started_at=started_at,
@@ -1217,7 +1772,7 @@ async def _run_node(task: EiaTaskState, node_id: str, *, continue_on_success: bo
             )
             if not exists:
                 latest_task.evidence_refs.append(ref)
-    latest_task.active_hermes_run_id = None
+    _clear_active_agent(latest_task)
     task_completed = False
     if paused_by_user:
         latest_task.module_results.pop(node_id, None)
@@ -1269,7 +1824,7 @@ async def _run_task_loop(task_id: str) -> None:
             task = task_store.get(task_id)
             task.status = "failed"
             task.current_node = None
-            task.active_hermes_run_id = None
+            _clear_active_agent(task)
             task.error = str(exc)
             task_store.save(task)
         except Exception:
@@ -1286,7 +1841,7 @@ async def _run_task_until_loop(task_id: str, *, stop_after_node: str) -> None:
             if task.pause_requested:
                 task.status = "paused"
                 task.current_node = None
-                task.active_hermes_run_id = None
+                _clear_active_agent(task)
                 task_store.save(task)
                 event_store.append(task_id, "task_paused", "Task paused before next node")
                 await _sync_graph_checkpoint(task_id, mode="run")
@@ -1295,7 +1850,7 @@ async def _run_task_until_loop(task_id: str, *, stop_after_node: str) -> None:
             if not node_id:
                 task.status = "completed"
                 task.current_node = None
-                task.active_hermes_run_id = None
+                _clear_active_agent(task)
                 task_store.save(task)
                 event_store.append(task_id, "task_completed", "Task completed")
                 await _sync_graph_checkpoint(task_id, mode="run")
@@ -1317,7 +1872,7 @@ async def _run_task_until_loop(task_id: str, *, stop_after_node: str) -> None:
             if node_id == stop_after_node:
                 latest.status = "paused"
                 latest.current_node = None
-                latest.active_hermes_run_id = None
+                _clear_active_agent(latest)
                 latest.pause_requested = False
                 task_store.save(latest)
                 event_store.append(
@@ -1333,7 +1888,7 @@ async def _run_task_until_loop(task_id: str, *, stop_after_node: str) -> None:
         task = task_store.get(task_id)
         task.status = "failed"
         task.current_node = None
-        task.active_hermes_run_id = None
+        _clear_active_agent(task)
         task.error = str(exc)
         task_store.save(task)
         event_store.append(task_id, "task_failed", str(exc))
@@ -1343,34 +1898,39 @@ async def _run_task_until_loop(task_id: str, *, stop_after_node: str) -> None:
 
 @app.get("/api/health")
 async def health() -> dict[str, Any]:
-    hermes = None
+    provider = _agent_provider()
+    agent = None
     try:
-        hermes = await hermes_client.health()
+        agent = await _agent_client(provider).health()
     except Exception as exc:  # noqa: BLE001
-        hermes = {"status": "error", "error": str(exc)}
+        agent = {"status": "error", "error": str(exc)}
     return {
-        "status": "ok" if hermes.get("status") != "error" else "degraded",
+        "status": "ok" if agent.get("status") != "error" else "degraded",
         "edition": settings.deployment_edition,
-        "hermes": hermes,
+        "provider": provider,
+        "agent": agent,
+        "hermes": agent if provider == "hermes" else None,
         "auto_recovery": settings.auto_recover_running_tasks,
     }
 
 
 @app.get("/api/ready")
 async def readiness() -> Response:
+    provider = _agent_provider()
     try:
-        hermes = await hermes_client.health()
+        agent = await _agent_client(provider).health()
     except Exception as exc:  # noqa: BLE001
         return JSONResponse(
             status_code=503,
             content={
                 "status": "not_ready",
                 "edition": settings.deployment_edition,
-                "hermes": {"status": "error", "error": str(exc)},
+                "provider": provider,
+                "agent": {"status": "error", "error": str(exc)},
             },
         )
     return JSONResponse(
-        content={"status": "ready", "edition": settings.deployment_edition, "hermes": hermes}
+        content={"status": "ready", "edition": settings.deployment_edition, "provider": provider, "agent": agent}
     )
 
 
@@ -1392,26 +1952,26 @@ async def _recover_running_tasks_impl(*, mode: str, force: bool) -> dict[str, An
             skipped.append({"task_id": task.task_id, "reason": "active_in_current_process"})
             continue
         original_node = task.current_node
-        original_run_id = task.active_hermes_run_id
+        original_provider, original_run_id = _active_agent(task)
         stop_result = None
         if original_run_id:
             try:
-                stop_result = await hermes_client.stop_run(original_run_id)
+                stop_result = await _agent_client(original_provider or "hermes").stop_run(original_run_id)
                 event_store.append(
                     task.task_id,
-                    "hermes_run_stop_requested",
-                    f"Stop requested for orphan run {original_run_id}",
+                    "agent_run_stop_requested",
+                    f"Stop requested for orphan {original_provider or 'hermes'} run {original_run_id}",
                     node_id=original_node,
-                    payload=stop_result,
+                    payload={"provider": original_provider or "hermes", **stop_result},
                 )
             except Exception as exc:  # noqa: BLE001
                 stop_result = {"error": str(exc), "run_id": original_run_id}
                 event_store.append(
                     task.task_id,
-                    "hermes_run_stop_failed",
+                    "agent_run_stop_failed",
                     str(exc),
                     node_id=original_node,
-                    payload={"run_id": original_run_id},
+                    payload={"provider": original_provider or "hermes", "run_id": original_run_id},
                 )
         if mode == "pause":
             task.status = "paused"
@@ -1422,7 +1982,7 @@ async def _recover_running_tasks_impl(*, mode: str, force: bool) -> dict[str, An
             task.status = "failed"
             task.error = "Recovered orphan running task as failed."
         task.current_node = None
-        task.active_hermes_run_id = None
+        _clear_active_agent(task)
         task_store.save(task)
         event_store.append(
             task.task_id,
@@ -1621,7 +2181,7 @@ async def run_task(task_id: str) -> StepResponse:
     task.pause_requested = False
     task.status = "running"
     task.current_node = None
-    task.active_hermes_run_id = None
+    _clear_active_agent(task)
     task.error = None
     task_store.save(task)
     RUNNING_TASKS.add(task_id)
@@ -1650,7 +2210,7 @@ async def run_task_until(task_id: str, payload: dict[str, Any]) -> StepResponse:
     task.pause_requested = False
     task.status = "running"
     task.current_node = None
-    task.active_hermes_run_id = None
+    _clear_active_agent(task)
     task.error = None
     task_store.save(task)
     RUNNING_TASKS.add(task_id)
@@ -1673,7 +2233,7 @@ async def validate_task_files(task_id: str) -> NodeResult:
     if not task.project_files and not task.project_text.strip():
         raise HTTPException(status_code=400, detail="No project text or files to validate")
     prompt = _build_aux_prompt(task, "aux_file_validation.txt", {}, node_id="FILE-VALIDATION")
-    result = await _execute_hermes_aux_agent(
+    result = await _execute_agent_aux(
         task=task,
         node_id="FILE-VALIDATION",
         title=NODE_TITLES["FILE-VALIDATION"],
@@ -1718,11 +2278,11 @@ async def feedback_node(task_id: str, node_id: str, payload: dict[str, Any]) -> 
             "previous_result": previous.markdown or json.dumps(previous.structured, ensure_ascii=False, indent=2),
             "feedback": f"{action_instruction}\n\n{feedback}",
         },
-        node_id=f"{node_id}-FEEDBACK",
+        node_id=f"{node_id}-FEEDBACK" if action == "analyze_error" else node_id,
     )
     if action == "analyze_error":
         output_prefix = f"{node_id}.feedback_analysis"
-        result = await _execute_hermes_aux_agent(
+        result = await _execute_agent_aux(
             task=task,
             node_id=f"{node_id}-FEEDBACK",
             title=f"{NODE_TITLES.get(node_id, node_id)} 反馈错误原因分析",
@@ -1740,7 +2300,7 @@ async def feedback_node(task_id: str, node_id: str, payload: dict[str, Any]) -> 
         )
         return result
 
-    result = await _execute_hermes_aux_agent(
+    result = await _execute_agent_aux(
         task=task,
         node_id=node_id,
         title=f"{NODE_TITLES.get(node_id, node_id)}（反馈修正）",
@@ -1750,12 +2310,12 @@ async def feedback_node(task_id: str, node_id: str, payload: dict[str, Any]) -> 
         output_prefix=node_id,
     )
     if result.status != "completed":
-        # _execute_hermes_aux_agent persists its result before returning. Keep
+        # The auxiliary Agent persists its result before returning. Keep
         # the last usable node result when the feedback run itself fails.
         task.module_results[node_id] = previous
         task.status = "paused"
         task.current_node = None
-        task.active_hermes_run_id = None
+        _clear_active_agent(task)
         task.error = result.error or "反馈修正未完成"
         _rebuild_task_evidence_from_results(task)
         task_store.save(task)
@@ -1764,7 +2324,12 @@ async def feedback_node(task_id: str, node_id: str, payload: dict[str, Any]) -> 
             "node_feedback_failed",
             f"Feedback revision failed for {node_id}",
             node_id=node_id,
-            payload={"feedback": feedback, "error": task.error, "hermes_run_id": result.hermes_run_id},
+            payload={
+                "feedback": feedback,
+                "error": task.error,
+                "agent_provider": result.agent_provider,
+                "agent_run_id": result.agent_run_id,
+            },
         )
         return result
     route = list(NEXT_NODE.keys())
@@ -1777,7 +2342,7 @@ async def feedback_node(task_id: str, node_id: str, payload: dict[str, Any]) -> 
     task.status = "created" if task.next_node else "completed"
     task.pause_requested = False
     task.current_node = None
-    task.active_hermes_run_id = None
+    _clear_active_agent(task)
     task.error = None
     history = task.module_results[node_id].structured.get("feedback_history")
     feedback_record = {
@@ -1786,7 +2351,8 @@ async def feedback_node(task_id: str, node_id: str, payload: dict[str, Any]) -> 
         "action": action,
         "cleared_nodes": clear_nodes,
         "created_at": now_iso(),
-        "hermes_run_id": result.hermes_run_id,
+        "agent_provider": result.agent_provider,
+        "agent_run_id": result.agent_run_id,
     }
     if not isinstance(history, list):
         history = []
@@ -1809,39 +2375,42 @@ async def feedback_node(task_id: str, node_id: str, payload: dict[str, Any]) -> 
 @app.post("/api/tasks/{task_id}/pause")
 async def pause_task(task_id: str) -> dict[str, Any]:
     task = _task_or_404(task_id)
+    active_provider, active_run_id = _active_agent(task)
     if task.status in {"completed", "failed"}:
         event_store.append(task_id, "task_pause_ignored", f"Pause ignored for terminal task: {task.status}")
         return {
             "task_id": task_id,
             "status": task.status,
+            "active_agent_provider": active_provider,
+            "active_agent_run_id": active_run_id,
             "active_hermes_run_id": task.active_hermes_run_id,
             "stop_result": None,
             "ignored": True,
         }
     task.pause_requested = True
-    if task.status != "running" or (task.status == "running" and not task.current_node and not task.active_hermes_run_id):
+    if task.status != "running" or (task.status == "running" and not task.current_node and not active_run_id):
         task.status = "paused"
-        task.active_hermes_run_id = None
+        _clear_active_agent(task)
     task_store.save(task)
 
     stop_result = None
-    if task.status == "running" and task.active_hermes_run_id:
+    if task.status == "running" and active_run_id:
         try:
-            stop_result = await hermes_client.stop_run(task.active_hermes_run_id)
+            stop_result = await _agent_client(active_provider or "hermes").stop_run(active_run_id)
             event_store.append(
                 task_id,
-                "hermes_run_stop_requested",
-                f"Stop requested for {task.active_hermes_run_id}",
+                "agent_run_stop_requested",
+                f"Stop requested for {active_provider or 'hermes'} run {active_run_id}",
                 node_id=task.current_node,
-                payload=stop_result,
+                payload={"provider": active_provider or "hermes", **stop_result},
             )
         except Exception as exc:  # noqa: BLE001
             event_store.append(
                 task_id,
-                "hermes_run_stop_failed",
+                "agent_run_stop_failed",
                 str(exc),
                 node_id=task.current_node,
-                payload={"run_id": task.active_hermes_run_id},
+                payload={"provider": active_provider or "hermes", "run_id": active_run_id},
             )
     event_store.append(task_id, "task_paused", "Pause requested")
     if task.status != "running":
@@ -1849,6 +2418,8 @@ async def pause_task(task_id: str) -> dict[str, Any]:
     return {
         "task_id": task_id,
         "status": task.status,
+        "active_agent_provider": active_provider,
+        "active_agent_run_id": active_run_id,
         "active_hermes_run_id": task.active_hermes_run_id,
         "stop_result": stop_result,
     }
@@ -1858,7 +2429,7 @@ async def pause_task(task_id: str) -> dict[str, Any]:
 async def resume_task(task_id: str) -> dict[str, Any]:
     task = _task_or_404(task_id)
     task.pause_requested = False
-    task.active_hermes_run_id = None
+    _clear_active_agent(task)
     if task.status == "paused":
         task.status = "created"
     task_store.save(task)
@@ -1886,7 +2457,7 @@ async def rerun_node(task_id: str, node_id: str) -> dict[str, Any]:
     task.status = "created"
     task.pause_requested = False
     task.current_node = None
-    task.active_hermes_run_id = None
+    _clear_active_agent(task)
     task.error = None
     task_store.save(task)
     event_store.append(
@@ -1981,7 +2552,7 @@ async def web_search_agent(payload: dict[str, Any]) -> dict[str, Any]:
         node_id="WEB-SEARCH",
     )
     output_task_id = task.task_id if task else "search"
-    result = await _execute_hermes_aux_agent(
+    result = await _execute_agent_aux(
         task=task,
         node_id="WEB-SEARCH",
         title=NODE_TITLES["WEB-SEARCH"],

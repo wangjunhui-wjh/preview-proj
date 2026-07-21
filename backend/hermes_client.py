@@ -33,7 +33,12 @@ class HermesClient:
         instructions: str | None = None,
         conversation_history: list[dict[str, str]] | None = None,
         session_id: str | None = None,
+        local_images: list[str] | None = None,
+        output_schema: dict[str, Any] | None = None,
     ) -> dict[str, Any]:
+        # Hermes does not accept these Codex-specific request fields; keeping
+        # them in the signature lets it satisfy the provider-neutral contract.
+        del local_images, output_schema
         body: dict[str, Any] = {"input": user_input}
         if instructions:
             body["instructions"] = instructions

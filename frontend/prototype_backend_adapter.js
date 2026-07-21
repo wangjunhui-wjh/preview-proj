@@ -81,6 +81,7 @@
     state.liveOutput = state.liveOutput || {};
     state.eventLog = state.eventLog || [];
     state.currentNode = localStorage.getItem('hb_current_node') || state.currentNode || '';
+    state.activeAgentRunId = localStorage.getItem('hb_active_agent_run_id') || state.activeAgentRunId || '';
     state.activeHermesRunId = localStorage.getItem('hb_active_hermes_run_id') || state.activeHermesRunId || '';
     state.runStatusMessage = localStorage.getItem('hb_run_status_message') || state.runStatusMessage || '';
     state.promptDrafts = JSON.parse(localStorage.getItem('hb_prompt_drafts') || '{}');
@@ -97,6 +98,7 @@
     localStorage.setItem('hb_task_status', state.taskStatus || '');
     localStorage.setItem('hb_next_node', state.nextNode || '');
     localStorage.setItem('hb_current_node', state.currentNode || '');
+    localStorage.setItem('hb_active_agent_run_id', state.activeAgentRunId || '');
     localStorage.setItem('hb_active_hermes_run_id', state.activeHermesRunId || '');
     localStorage.setItem('hb_run_status_message', state.runStatusMessage || '');
     localStorage.setItem('hb_prompt_drafts', JSON.stringify(state.promptDrafts || {}));
@@ -319,7 +321,7 @@
     if (state.taskStatus !== 'running') return '';
     const code = activeRunNode();
     const title = code ? `${code} ${nodeLabel(code)}` : '等待后端节点启动';
-    const detail = state.runStatusMessage || (state.activeHermesRunId ? `模型调用中：${state.activeHermesRunId}` : '正在等待后端事件...');
+    const detail = state.runStatusMessage || (state.activeAgentRunId || state.activeHermesRunId ? `模型调用中：${state.activeAgentRunId || state.activeHermesRunId}` : '正在等待后端事件...');
     return `
       <div class="backend-run-status" id="backendRunStatus">
         <div class="backend-run-main">
@@ -403,6 +405,7 @@
     state.taskId = task.task_id || state.taskId;
     state.taskStatus = task.status || '';
     state.currentNode = task.current_node || '';
+    state.activeAgentRunId = task.active_agent_run_id || task.active_hermes_run_id || '';
     state.activeHermesRunId = task.active_hermes_run_id || '';
     state.nextNode = task.next_node || '';
     state.evidenceRefs = task.evidence_refs || [];
@@ -411,6 +414,7 @@
     }
     if (state.taskStatus !== 'running') {
       state.currentNode = '';
+      state.activeAgentRunId = '';
       state.activeHermesRunId = '';
       state.runStatusMessage = '';
     }
@@ -474,11 +478,12 @@
         state.taskStatus = 'running';
         state.runStatusMessage = `正在执行 ${nodeLabel(nodeId)}`;
       }
-      if (evt.type === 'hermes_call_start' || evt.type === 'hermes_run_started') {
+      if (evt.type === 'agent_call_start' || evt.type === 'agent_run_started' || evt.type === 'hermes_call_start' || evt.type === 'hermes_run_started') {
         state.currentNode = nodeId || state.currentNode;
+        state.activeAgentRunId = evt.payload?.run_id || evt.payload?.run?.run_id || state.activeAgentRunId || '';
         state.activeHermesRunId = evt.payload?.run_id || evt.payload?.run?.run_id || state.activeHermesRunId || '';
         state.taskStatus = 'running';
-        state.runStatusMessage = state.activeHermesRunId ? `模型调用中：${state.activeHermesRunId}` : '模型调用中';
+        state.runStatusMessage = state.activeAgentRunId ? `模型调用中：${state.activeAgentRunId}` : '模型调用中';
       }
       if (evt.type === 'tool_event') {
         state.currentNode = nodeId || state.currentNode;
@@ -492,6 +497,7 @@
       if (evt.type === 'node_failed') {
         state.nodeStatuses[nodeId] = 'failed';
         state.currentNode = '';
+        state.activeAgentRunId = '';
         state.activeHermesRunId = '';
         state.runStatusMessage = '';
       }
@@ -507,12 +513,14 @@
       if (evt.type === 'task_paused') {
         state.taskStatus = 'paused';
         state.currentNode = '';
+        state.activeAgentRunId = '';
         state.activeHermesRunId = '';
         state.runStatusMessage = '';
       }
       if (evt.type === 'task_completed') {
         state.taskStatus = 'completed';
         state.currentNode = '';
+        state.activeAgentRunId = '';
         state.activeHermesRunId = '';
         state.runStatusMessage = '';
       }
@@ -562,7 +570,7 @@
   }
 
   callDeepSeek = async function () {
-    throw new Error('前端直连模型已禁用，请通过后端 Hermes Agent 执行任务');
+    throw new Error('前端直连模型已禁用，请通过后端 Agent 执行任务');
   };
 
   saveApiConfig = function () {
@@ -570,7 +578,7 @@
     state.model = document.getElementById('apiModel')?.value.trim() || state.model;
     state.apiKey = document.getElementById('apiKey')?.value.trim() || state.apiKey;
     saveState();
-    toast('页面保持原型配置入口；实际模型调用使用后端环境变量和 Hermes 服务', 'info');
+    toast('页面保持原型配置入口；实际模型调用使用后端环境变量和 Agent 服务', 'info');
   };
 
   saveSearchApiConfig = function () {

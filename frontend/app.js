@@ -350,7 +350,7 @@ const STEP_NODE_MAP = {
 
 // ============ API CALL ============
 async function callDeepSeek(systemPrompt, userPrompt) {
-  throw new Error('前端直连模型已禁用，请通过后端 Hermes Agent 执行任务');
+  throw new Error('前端直连模型已禁用，请通过后端 Agent 执行任务');
 }
 
 // ============ BACKEND API ============
@@ -903,7 +903,7 @@ async function testBackendConnection() {
   state.backendBase = document.getElementById('backendBase')?.value.trim() || state.backendBase;
   saveState();
   const health = await apiFetch('/api/health');
-  toast(`后端连接正常：Hermes ${health.hermes?.status || 'unknown'}`, 'success');
+  toast(`后端连接正常：${health.provider || 'agent'} ${health.agent?.status || 'unknown'}`, 'success');
 }
 
 async function createBackendTask() {
@@ -2065,7 +2065,7 @@ function renderSearchPanel(container) {
     <div class="card">
       <h2>联网检索 <span class="badge badge-new">后端Agent</span></h2>
       <p style="color:#888;font-size:13px;margin-bottom:12px;">在研判过程中遇到模棱两可、依据不足或文件有效性存疑时，可在此单独检索官方回复、政策解读、规划环评、审批原则和同类项目资料。检索结果进入候选依据库，人工审核后才能作为正式依据使用。</p>
-      <div class="kb-select-bar" style="background:#eef7ff;border-color:#bbdefb;">前端不再配置搜索 API，也不限定检索词。后端 Hermes Agent 会根据问题自行组织关键词和来源优先级，并记录真实 URL。</div>
+      <div class="kb-select-bar" style="background:#eef7ff;border-color:#bbdefb;">前端不再配置搜索 API，也不限定检索词。后端 Agent 会根据问题自行组织关键词和来源优先级，并记录真实 URL。</div>
       <div style="display:flex;align-items:center;gap:12px;margin-bottom:12px;padding:10px 14px;background:#f0f7ff;border:1px solid #bbdefb;border-radius:6px;">
         <label style="display:flex;align-items:center;gap:8px;cursor:pointer;font-size:13px;font-weight:600;">
           <input type="checkbox" id="autoSearchToggle" ${state.autoSearch ? 'checked' : ''} onchange="toggleAutoSearch(this.checked)" style="width:18px;height:18px;">
@@ -2551,7 +2551,7 @@ function renderModuleStep(container, moduleIndex) {
   const hasSearchContext = !!state.searchContext;
   const localFileCount = state.localFiles.length;
   const implemented = BACKEND_IMPLEMENTED_NODES.includes(code);
-  const autoSearchInfo = '<div class="kb-select-bar" style="background:#eef7ff;border-color:#bbdefb;">文档读取、图片识别和联网检索由后端 Hermes Agent 在节点内部自主执行；前端只负责提交任务、显示事件和结果。</div>';
+  const autoSearchInfo = '<div class="kb-select-bar" style="background:#eef7ff;border-color:#bbdefb;">文档读取、图片识别和联网检索由后端 Agent 在节点内部自主执行；前端只负责提交任务、显示事件和结果。</div>';
   const liveText = state.liveOutput[code] || '';
   const hasSpecialtyResults = SPECIALTY_NODES.some(nodeId => Object.prototype.hasOwnProperty.call(state.results, nodeId));
 
@@ -2603,7 +2603,7 @@ function renderModuleStep(container, moduleIndex) {
 
 // ============ ACTIONS ============
 function saveApiConfig() {
-  toast('模型 API 配置由后端环境变量和 Hermes 服务管理', 'info');
+  toast('模型 API 配置由后端环境变量和 Agent 服务管理', 'info');
 }
 
 function saveSearchApiConfig() {

@@ -58,6 +58,9 @@ class Settings:
     vision_cache_dir: Path = Path(_env("VISION_CACHE_DIR", str(ROOT_DIR / "data" / "vision-cache")))
     knowledge_dir: Path = Path(_env("KNOWLEDGE_DIR", str(ROOT_DIR / "data" / "knowledge")))
     database_url: str = _env("DATABASE_URL", f"sqlite:///{ROOT_DIR / 'data' / 'app.db'}")
+    agent_provider: str = _env("EIA_AGENT_PROVIDER", "codex").lower()
+    codex_agent_base_url: str = _env("CODEX_AGENT_BASE_URL", "http://127.0.0.1:8765").rstrip("/")
+    codex_agent_api_key: str = _env("CODEX_AGENT_API_KEY")
     hermes_base_url: str = _env("HERMES_BASE_URL", "http://127.0.0.1:8642").rstrip("/")
     hermes_api_key: str = _default_hermes_api_key()
     hermes_model: str = _env("HERMES_MODEL", "hermes-agent")
@@ -73,6 +76,17 @@ class Settings:
         "HERMES_CONTROLLER_VISION_ROOT",
         _env("AGENT_VISION_CACHE_ROOT", "/eia/vision-cache"),
     ).rstrip("/")
+
+    def provider_for(self, _entrypoint: str | None = None) -> str:
+        """Return the configured Agent runtime.
+
+        Hermes remains an explicit rollback provider during the migration. The
+        Codex sidecar owns the autonomous tools and context handling; the API
+        server only chooses the runtime and persists its events.
+        """
+        if self.agent_provider not in {"codex", "hermes"}:
+            raise ValueError("EIA_AGENT_PROVIDER must be codex or hermes")
+        return self.agent_provider
 
     def ensure_dirs(self) -> None:
         for path in (

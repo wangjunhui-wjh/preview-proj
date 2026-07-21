@@ -11,6 +11,7 @@ def now_iso() -> str:
 
 
 TaskStatus = Literal["created", "running", "paused", "failed", "completed"]
+AgentProvider = Literal["codex", "hermes"]
 DocumentStatus = Literal["candidate", "verified_candidate", "verified", "rejected", "deprecated"]
 DocumentValidity = Literal["effective", "superseded", "expired", "unknown"]
 
@@ -59,6 +60,9 @@ class NodeResult(BaseModel):
     evidence_refs: list[EvidenceRef] = Field(default_factory=list)
     tool_trace: list[dict[str, Any]] = Field(default_factory=list)
     output_files: list[str] = Field(default_factory=list)
+    agent_provider: AgentProvider | None = None
+    agent_run_id: str | None = None
+    # Deprecated compatibility field for historical Hermes results.
     hermes_run_id: str | None = None
     error: str | None = None
     started_at: str | None = None
@@ -71,6 +75,9 @@ class EiaTaskState(BaseModel):
     current_node: str | None = None
     next_node: str | None = "PREP-INGEST"
     pause_requested: bool = False
+    active_agent_provider: AgentProvider | None = None
+    active_agent_run_id: str | None = None
+    # Deprecated compatibility field for tasks created before provider-neutral state.
     active_hermes_run_id: str | None = None
     project_text: str = ""
     project_files: list[FileRef] = Field(default_factory=list)

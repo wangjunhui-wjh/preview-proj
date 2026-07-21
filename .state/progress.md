@@ -12,9 +12,9 @@
 
 ## Current State
 
-- current_step: `CX-02_CODEX_AGENT_SIDECAR`
-- next_step: `CX-03_CODEX_REPRESENTATIVE_NODES`
-- status: `codex_sidecar_accepted_live_traffic_unchanged`
+- current_step: `CX-03B_AGENT_DEVELOPER_INSTRUCTIONS`
+- next_step: `CX-03C_REAL_TOOL_SELECTION_RECHECK`
+- status: `codex_developer_rules_contract_passed`
 - last_updated: `2026-07-21 Asia/Shanghai`
 - target_route: `Codex SDK/App Server Agent + LangGraph + uploaded HTML prototype`
 - active_agents: `Desktop Compose Hermes API Server eia-desktop-hermes-1, provider:custom:eia-managed, model:gpt-5.6-terra, terminal:local in Controller container`; `Desktop Compose backend eia-desktop-backend-1 on http://127.0.0.1:8501`
@@ -104,6 +104,12 @@
 - 历史运行日志与报告产物，仅保留 `.gitkeep`
 
 ## Change Log
+
+- 2026-07-21 Asia/Shanghai: 按用户要求将公共 Agent 规则提升到 Codex Runtime `developer_instructions`。新增 `prompts/agent_developer_instructions.txt`，覆盖原生 Web Search 与 Shell 职责、PDF/OCR/视觉、依据真实性、无人值守、上下文压缩和完成条件；`backend/main.py` 主节点、辅助 Agent、反馈修正和 Hermes 回滚均通过 `instructions` 传递，`system_prompt.txt` 不再重复塞入节点 input。移除临时 `MAX_AGENT_TOOL_OPERATIONS`/固定工具次数逻辑，仅保留工具职责规则。伪 Agent 测试新增并通过 developer instruction 断言；下一步复测真实工具选择，不以次数门禁作为验收条件。
+
+- 2026-07-21 Asia/Shanghai: `CX-03B_UNIFIED_CODEX_EXECUTION` 完成开发与伪 Agent 契约验收。`EIA_AGENT_PROVIDER` 默认改为 `codex`；`PREP-INGEST`、`HB-PT-000~011`、`FILE-VALIDATION`、`WEB-SEARCH`、反馈修正和辅助 Agent 统一走中性 AgentClient/Codex sidecar；主节点支持严格 JSON Schema、结果门禁、SSE 工具/usage/上下文压缩事件、失败不推进、provider-neutral 暂停/恢复，Hermes 仅保留显式回滚路径；前端状态改读 `active_agent_run_id` 和通用 Agent 事件。新增 `backend/node_schema.py` 和 `scripts/cx03_codex_contract_smoke.py`，四个代表节点、失败门禁、资料验证、反馈修正测试通过。未重启当前 Desktop backend/Hermes；下一步在隔离 sidecar 上执行真实 Gate B。
+
+- 2026-07-21 Asia/Shanghai: 用户将迁移范围调整为“一步到位全部转 Codex”，不再采用只接入 `PREP-INGEST/HB-PT-002/HB-PT-009` 的代表节点阶段。新的 CX-03 将统一改造 `PREP-INGEST`、`HB-PT-000~011`、`FILE-VALIDATION`、`WEB-SEARCH`、反馈修正和辅助 Agent；Codex 为默认 provider，Hermes 仅保留为显式回滚 provider。三节点仍作为 Gate B 的重点业务验收样本，但不再是唯一接入范围。下一步实现统一 Codex 执行层和全入口路由。
 
 - 2026-07-21 Asia/Shanghai: `CX-02_CODEX_AGENT_SIDECAR` 完成。新增中性 `AgentClient` 和官方 SDK sidecar，固定镜像 `eia-codex-agent:0.144.4-cx02`；临时隔离容器真实通过 health、401 鉴权、结构化 Turn、SSE message/tool/usage、结果查询、活动 Turn interrupt 和重启后 completed Run 查询。安全验收中发现并修复 shell snapshot 持久化环境 Key：最终配置使用 `inherit=core`、敏感变量排除、`shell_snapshot=false`、`plugins/apps=false`；Agent shell 实测 `env-check.txt=CLEAN`，全 CODEX_HOME/run/events 双 Key 扫描 0 命中，无 auth.json/snapshot/plugin cache。当前 backend/Hermes 未改执行器、保持 healthy。详见 `outputs/Codex替换Hermes_CX-02_Sidecar验收记录.md` 和 `logs/codex_replacement_cx02_20260721.md`；下一步 `CX-03_CODEX_REPRESENTATIVE_NODES`。
 
